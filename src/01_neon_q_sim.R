@@ -190,6 +190,7 @@ ms_q[[zzx]] <- filter(ms_q[[zzx]], date > as.Date('1990-01-01'))
 
 ## 2. reconstruct early NEON discharge via regression on donor gauges ####
 
+formulaA <- 'discharge ~ `{paste(gagenums, collapse = "`+`")}` + season'
 formulaB <- 'discharge_log ~ `{paste(paste0(gagenums, "_log"), collapse = "`+`")}` + season'
 
 results <- tibble(site_code = neon_sites, nse_logq = NA, nse_cv_logq = NA, bestmod_logq = NA,
@@ -225,7 +226,21 @@ mods = generate_nested_formulae(
 best = eval_model_set(data = lm_df, model_list = mods)
 results = plots_and_results(neon_site, best, lm_df, results)
 
+# library(randomForest)
+# neon_site = 'KING'; gagenums = c('06879650', '06879810', '06879100', '06878600');
+# gagenums <- paste0('X', gagenums)
+# dd <- lm_df
+# colnames(dd) <- sub('^([0-9])', 'X\\1', colnames(dd), perl = TRUE)
+# model <- randomForest(as.formula(glue(formulaB)), data = dd[complete.cases(dd), ])
+# # predictions <- predict(model, )
+
 library(caret)
+tc <- trainControl(method = 'cv', number = 10)
+model <- train(as.formula(glue(formulaA)),
+               data = lm_df[complete.cases(lm_df), ], trControl = tc, method = 'rf')
+caret::predict.train(model,
+predict(model, newdata = newdata[modseas_inds, ])) * wsa / 1000
+
 
 # BLUE ####
 neon_site = 'BLUE'; gagenums = '07332390'
