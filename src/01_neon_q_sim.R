@@ -106,15 +106,11 @@ ms_areas <- macrosheds::ms_load_sites() %>%
 
 ## 2. run setup ####
 
-formulaA <- 'discharge ~ {paste(gagenums, collapse = "+")} + season'
+# formulaA <- 'discharge ~ {paste(gagenums, collapse = "+")} + season'
 formulaB <- 'discharge_log ~ `{paste(paste0(gagenums, "_log"), collapse = "`+`")}` + season'
 
 results_lm <- tibble(site_code = neon_sites, nse_logq = NA, nse_cv_logq = NA,
                      bestmod_logq = NA, adj_r_squared = NA)
-
-results_rf <- tibble(site_code = neon_sites, mtry = NA, splitrule = NA, min.node.size = NA,
-                     RMSE = NA, Rsquared = NA, MAE = NA, RMSESD = NA, RsquaredSD = NA,
-                     MAESD = NA, NSE = NA, KGE = NA)
 
 ## 3.  linear regression (lm) ####
 # REDB ####
