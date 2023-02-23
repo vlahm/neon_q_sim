@@ -1,37 +1,22 @@
 # Mike Vlah
 # vlahm13@gmail.com
-# last data retrieval: 2023-01-31
-# last edit: 2023-01-31
+# last data retrieval: 2023-01-31 (all files except hjandrews_q.txt, retrieved 2022-04-14)
+# last edit: 2023-02-16
 
-# library(segmented)
-# library(feather)
-# library(nhdplusTools)
 library(dataRetrieval)
 library(data.table)
-# library(imputeTS)
 library(lubridate)
 library(glue)
 library(dygraphs)
 library(xts)
 library(hydroGOF)
-# library(errors)
-# library(ncdf4)
-# library(foreach)
-# library(doParallel)
-# library(sf)
 library(ggplot2)
 library(gridExtra)
 library(neonUtilities)
 library(htmlwidgets)
 library(DAAG)
-# library(forecast)
 library(tidyverse)
 library(macrosheds)
-
-# reticulate::use_condaenv('nh2')
-# xr <- reticulate::import("xarray")
-# pd <- reticulate::import("pandas")
-# np <- reticulate::import("numpy")
 
 #TODO: switch on addition of USGS Q record for TECR if we want to predict that site better in the past (~1980)
 #download.file(neon sites) for watershed areas
@@ -84,17 +69,24 @@ if(! file.exists('in/neon_q_eval.csv')){
 q_eval <- read_csv('in/neon_q_eval.csv') %>%
     filter(site %in% neon_sites)
 
-# MacroSheds data from H. J. Andrews and Niwot domains: used for donor gauges in lieu of USGS data
+# MacroSheds Q data from Niwot domain: used for donor gauges in lieu of USGS data
 
-if(! dir.exists('in/hjandrews') | ! dir.exists('in/niwot')){
+if(! dir.exists('in/niwot')){
     macrosheds::ms_download_core_data(macrosheds_root = './in',
-                                      domains = c('hjandrews', 'niwot'))
+                                      domains = 'niwot')
 }
 
 ms_q <- macrosheds::ms_load_product(macrosheds_root = './in',
                                     prodname = 'discharge',
-                                    domains = c('hjandrews', 'niwot')) %>%
+                                    domains = 'niwot') %>%
     filter(ms_status == 0)
+
+# H. J. Andrews Experimental Forest Q data: used for donor gauges in lieu of USGS data
+
+if(! file.exists('in/hjandrews_q.txt')){
+    download.file('https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-and.4341.33&entityid=86490799297ff361b0741b807804c43a',
+                  destfile = 'in/hjandrews_q.txt')
+}
 
 # relevant MacroSheds site metadata
 
@@ -103,6 +95,9 @@ ms_areas <- macrosheds::ms_load_sites() %>%
            ! is.na(ws_area_ha)) %>%
     select(site_code, ws_area_ha)
 
+# donor gauge IDs
+
+donor_gauges <- yaml::read_yaml('in/donor_gauges.yml')
 
 ## 2. run setup ####
 
@@ -112,11 +107,13 @@ formulaB <- 'discharge_log ~ `{paste(paste0(gagenums, "_log"), collapse = "`+`")
 results_lm <- tibble(site_code = neon_sites, nse_logq = NA, nse_cv_logq = NA,
                      bestmod_logq = NA, adj_r_squared = NA)
 
-## 3.  linear regression (lm) ####
+## 3. linear regression (lm) ####
+
 # REDB ####
-neon_site = 'REDB'; gagenums = '10172200'
+neon_site = 'REDB'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-lm_df = filter(lm_df, as.Date(datetime) != as.Date('2019-06-12')) #remove erroneous-looking outlier
+# remove erroneous outlier (both sites on same stream reach. one could not report >100L/s while the other reports <10L/s)
+lm_df = filter(lm_df, as.Date(datetime) != as.Date('2019-06-12'))
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df, interactions = TRUE, through_origin = TRUE)
@@ -124,7 +121,7 @@ best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
 # HOPB ####
-neon_site = 'HOPB'; gagenums = c('01174565')
+neon_site = 'HOPB'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
@@ -133,37 +130,42 @@ best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
 # KING ####
-neon_site = 'KING'; gagenums = c('06879650', '06879810', '06879100', '06878600');
+neon_site = 'KING'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 # lm_df$`06879650`[lm_df$`06879650` > 1200 & ! is.na(lm_df$discharge)] = NA
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
+
 # BLUE ####
-neon_site = 'BLUE'; gagenums = '07332390'
+neon_site = 'BLUE'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
 # CUPE ####
-neon_site = 'CUPE'; gagenums = c('50136400', '50138000', '50144000') #'50128907' no area available
+neon_site = 'CUPE'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
 # GUIL ####
-neon_site = 'GUIL'; gagenums = c('50028000', '50024950', '50126150', '50026025')
+neon_site = 'GUIL'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
@@ -174,7 +176,7 @@ mods = generate_nested_formulae(
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-# # TECR (using KREW donor gauges) ####
+# TECR [not yet viable. requires updated KREW donor gauges] ####
 # neon_site = 'TECR'; gagenums = c('11216400') #gagenums = 'T003'
 # lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 # mods = generate_nested_formulae(
@@ -184,13 +186,16 @@ results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 # best = eval_model_set(data = lm_df, model_list = mods)
 # results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#SYCA ####
+# SYCA ####
 
 # neon_site = 'SYCA'; gagenums = c('09510200', '09499000') 09510150
-neon_site = 'SYCA'; gagenums = c('09510200')
+neon_site = 'SYCA'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 # include_sensor_daterange = c('2019-06-01', '2020-07-01'))
 # ggplot(lm_df, aes(x=`09510200_log`, y = `discharge_log`)) + geom_point()
+
+# remove erroneous outlier (sites separated by < 10 km on same river with no major intervening tribs.
+#   very unlikely for one to report >100L/s while the other reports ~15L/s). This measurement also followed a long hiatus.
 lm_df = filter(lm_df, ! as.Date(datetime) == as.Date('2021-07-26'))
 
 mods = generate_nested_formulae(
@@ -262,40 +267,46 @@ results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 # par(defpar)
 # dev.off()
 
-# WALK NO UP-TO-DATE REFERENCE Q ####
-neon_site = 'WALK'; gagenums = c('03535000', '03535400', '03495405') #gagenums = c('east_fork', 'west_fork');
+# WALK ####
+neon_site = 'WALK'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#TOMB ####
+# TOMB ####
 # neon_site = 'TOMB'; gagenums = '02469525'
-neon_site = 'TOMB'; gagenums = c('02469761', '02469525')
+neon_site = 'TOMB'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#ARIK ####
-neon_site = 'ARIK'; gagenums = c('06827000', '06823000')#, '06821500' produces rank deficiencies
+# ARIK ####
+neon_site = 'ARIK'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 # include_sensor_data = TRUE)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#MCDI ####
-neon_site = 'MCDI'; gagenums = c('06888500', '06879650')
+# MCDI ####
+neon_site = 'MCDI'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 # include_pct_highvals = 5)
 # include_sensor_daterange = c('2018-11-01', '2019-10-01'))
@@ -307,6 +318,8 @@ lm_df = filter(lm_df, ! datetime %in% ymd_hms(c('2018-08-27 14:19:00', '2022-03-
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
@@ -371,39 +384,45 @@ results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 # dev.off()
 
 
-#LECO ####
-neon_site = 'LECO'; gagenums = '03497300'
+# LECO ####
+neon_site = 'LECO'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#LEWI ####
-neon_site = 'LEWI'; gagenums = c('01636316', '01616100', '01636464')
+# LEWI ####
+neon_site = 'LEWI'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#PRIN MAYBE SOME KIND OF INTERP THING IS POSSIBLE? ####
+# PRIN [very poor. maybe interpolation would help] ####
 # neon_site = 'PRIN'; gagenums = c('08044000', '08042950', '08042800')
-neon_site = 'PRIN'; gagenums = c('08044000')
+neon_site = 'PRIN'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#POSE ####
-neon_site = 'POSE'; gagenums = c('01636316', '01616100', '01662800', '01636464')
+# POSE ####
+neon_site = 'POSE'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 # include_pct_highvals = 10)
 # include_sensor_daterange = c('2017-01-25', '2018-08-01'))
@@ -416,47 +435,51 @@ mods = generate_nested_formulae(
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#BLDE ####
-neon_site = 'BLDE'; gagenums = c('06190540', '06188000')
+# BLDE ####
+neon_site = 'BLDE'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 # include_sensor_daterange = c('2019-01-01', '2020-09-01'))
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#BLWA ####
-neon_site = 'BLWA'; gagenums = c('02466030', '02465000')
+# BLWA ####
+neon_site = 'BLWA'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#MCRA ####
-# download.file('https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-and.4341.33&entityid=86490799297ff361b0741b807804c43a',
-#               destfile = '../imputation/data/macrosheds_continuous_Q/hjandrews_raw.txt')
-gagenums = c('GSWS01', 'GSWS06', 'GSWS07', 'GSWS08', 'GSLOOK')
-hja = read_csv('../imputation/data/macrosheds_continuous_Q/hjandrews_raw.txt') %>%
+# MCRA ####
+
+neon_site = 'MCRA'; gagenums = donor_gauges[[neon_site]]
+hja = read_csv('in/hjandrews_q.txt') %>%
     filter(SITECODE %in% gagenums) %>%
     select(datetime = DATE_TIME, SITECODE, INST_Q) %>%
-    mutate(INST_Q = INST_Q * 28.317) %>%
+    mutate(INST_Q = INST_Q * 28.317) %>% #cfs to L/s
     pivot_wider(names_from = SITECODE, values_from = INST_Q) %>%
     arrange(datetime)
-neon_site = 'MCRA'; #gagenums = 'GSLOOK'; gagenums2 = c('')
-lm_df = assemble_q_df(neon_site = neon_site, ms_Q_data = hja, overwrite = T)
+lm_df = assemble_q_df(neon_site = neon_site, ms_Q_data = hja)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-# #BIGC - needs KREW update (using daily mode) ####
+# BIGC [not yet viable. requires updated KREW donor gauges] ####
 # neon_site = 'BIGC'; gagenums = '11237500' #gagenums = c('P300', 'P301', 'P304') #gagenums = c('11238250')
 # lm_df = assemble_q_df_daily(neon_site = neon_site, nearby_usgs_gages = gagenums)
 # mods = generate_nested_formulae(
@@ -466,87 +489,104 @@ results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 # best = eval_model_set(data = lm_df, model_list = mods)
 # results_lm = plots_and_results_daily(neon_site, best, lm_df, results_lm) #STOP: this func needs update
 
-#MAYF ####
-neon_site = 'MAYF'; gagenums = c('02465493', '02465292', '02424000')
+# MAYF ####
+neon_site = 'MAYF'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#OKSR ####
-neon_site = 'OKSR'; gagenums = c('15905100', '15908000', '15564879', '15875000')
+# OKSR ####
+neon_site = 'OKSR'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
     interactions = TRUE,
     max_interaction = 3)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#CARI ####
-neon_site = 'CARI'; gagenums = c('15514000', '15511000', '15493400')
+# CARI ####
+neon_site = 'CARI'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-#COMO (composite model) ####
+# COMO [composite prediction] ####
 formulaC = "discharge_log ~ `{paste(paste0(gagenums, \"_log\"), collapse = \"`+`\")}`"
 
-neon_site = 'COMO'; gagenums = c('ALBION', 'SADDLE')
-ms_d = Filter(function(x) x$site_code[1] %in% gagenums, ms_q) %>%
-    reduce(bind_rows) %>%
-    pivot_wider(names_from = site_code, values_from = discharge) %>%
+neon_site = 'COMO'; gagenums = donor_gauges[[neon_site]][1:2]
+ms_d = ms_q %>%
+    filter(site_code %in% gagenums) %>%
+    mutate(date = as.Date(datetime)) %>%
+    select(date, site_code, val) %>%
+    pivot_wider(names_from = site_code, values_from = val) %>%
     arrange(date)
 lm_df1 = assemble_q_df_daily(neon_site = neon_site, ms_Q_data = ms_d)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaC)),
     d = lm_df1,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best1 = eval_model_set(data = lm_df1, model_list = mods)
 
-neon_site = 'COMO'; gagenums = c('ALBION', 'SADDLE', 'MARTINELLI')
-ms_d = Filter(function(x) x$site_code[1] %in% gagenums, ms_q) %>%
-    reduce(bind_rows) %>%
-    pivot_wider(names_from = site_code, values_from = discharge) %>%
+neon_site = 'COMO'; gagenums = donor_gauges[[neon_site]]
+ms_d = ms_q %>%
+    filter(site_code %in% gagenums) %>%
+    mutate(date = as.Date(datetime)) %>%
+    select(date, site_code, val) %>%
+    pivot_wider(names_from = site_code, values_from = val) %>%
     arrange(date)
 lm_df2 = assemble_q_df_daily(neon_site = neon_site, ms_Q_data = ms_d)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaC)),
     d = lm_df2,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best2 = eval_model_set(data = lm_df2, model_list = mods)
 
 results_lm = plots_and_results_daily_composite(neon_site, best1, best2, lm_df1, lm_df2, results_lm)
 
-#FLNT ####
-neon_site = 'FLNT'; gagenums = c('02355662', '02353000', '02356000')
+# FLNT ####
+neon_site = 'FLNT'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
 # MART ####
-neon_site = 'MART'; gagenums = c('14138870', '14123500', '14120000')
+neon_site = 'MART'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)#, include_pct_highvals = 10)
 mods = generate_nested_formulae(
     full_spec = as.formula(glue(formulaB)),
     d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
     interactions = TRUE)
 best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-# # WLOU ####
+# WLOU [not yet viable. poor prediction and donor gauges missing seasons] ####
 # neon_site = 'WLOU'; gagenums = c('09026500', '09025300', '09027100', '09034900')
 # lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 # mods = generate_nested_formulae(
@@ -556,16 +596,16 @@ results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 # best = eval_model_set(data = lm_df, model_list = mods)
 # results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-## write results ####
+## 4. write results ####
 
 write_csv(results_lm, '../imputation/out/lm_out/results.csv')
 
-## 4. random forest (abandoned; terrible predictions, esp. out of Q sample range) ####
+## 5. random forest regression (abandoned; poor predictions, esp. out of Q sample range) ####
 
 # library(caret)
 # library(ranger)
 
-#REDB ####
+# REDB
 neon_site = 'REDB'; gagenums = '10172200'
 rf_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
 rf_df = select(rf_df, -ends_with('_log')) %>% rename_with(~paste0('x', .), matches('^[0-9]+$'))
@@ -573,7 +613,7 @@ gagenums = paste0('x', gagenums)
 best = eval_model_set_rf(data = rf_df)
 plots_and_results_rf(neon_site, best, rf_df, results_rf)
 
-#KING ####
+# KING
 neon_site = 'KING'; gagenums = c('06879650', '06879810', '06879100', '06878600');
 rf_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
 rf_df = select(rf_df, -ends_with('_log')) %>% rename_with(~paste0('x', .), matches('^[0-9]+$'))
@@ -581,7 +621,7 @@ gagenums = paste0('x', gagenums)
 best = eval_model_set_rf(data = rf_df)
 plots_and_results_rf(neon_site, best, rf_df, results_rf)
 
-#GUIL ####
+# GUIL
 neon_site = 'GUIL'; gagenums = c('50028000', '50024950', '50126150', '50026025')
 rf_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
 rf_df = select(rf_df, -ends_with('_log')) %>% rename_with(~paste0('x', .), matches('^[0-9]+$'))
