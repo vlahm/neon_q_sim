@@ -1780,11 +1780,64 @@ gaugeid_to_location <- function(id){
 
     out <- dataRetrieval::readNWISsite(id)
     lat <- dms_to_decdeg(as.integer(out$lat_va))
-    long <- dms_to_decdeg(as.integer(out$long_va))
+    long <- -dms_to_decdeg(as.integer(out$long_va))
 
     sfobj <- tibble(lat = lat, long = long) %>%
         st_as_sf(coords = c('long', 'lat'), crs = 4269) %>%
         st_transform(crs = 4326)
 
     return(sfobj)
+}
+
+get_osm_streams <- function(extent_raster, outfile = NULL){
+
+    #extent_raster: either a terra spatRaster or a rasterLayer. The output
+    #   streams will have the same crs, and roughly the same extent, as this raster.
+    #outfile: string. If supplied, output shapefile will be written to this
+    #   location. If not supplied, the output will be returned.
+
+    message('Downloading streams layer from OpenStreetMap')
+
+    extent_raster <- terra::rast(extent_raster)
+    # rast_crs <- as.character(extent_raster@crs)
+    rast_crs <- terra::crs(extent_raster,
+                           proj = TRUE)
+
+    extent_raster_wgs84 <- terra::project(extent_raster,
+                                          y = 'epsg:4326')
+
+    dem_bounds <- terra::ext(extent_raster_wgs84)[c(1, 3, 2, 4)]
+
+    streams_query <- osmdata::opq(dem_bounds) %>%
+        osmdata::add_osm_feature(key = 'waterway',
+                                 value = c('river', 'stream'))
+
+    streams_query$prefix <- sub('timeout:25', 'timeout:180', streams_query$prefix)
+
+    streams <- osmdata::osmdata_sf(streams_query)
+    streams <- streams$osm_lines$geometry
+
+    streams_proj <- streams %>%
+        sf::st_transform(crs = rast_crs) %>%
+        sf::st_union() %>%
+        # sf::st_transform(crs = WGS84) %>%
+        sf::st_as_sf() %>%
+        rename(geometry = x) %>%
+        mutate(FID = 0:(n() - 1)) %>%
+        dplyr::select(FID, geometry)
+
+    if(! is.null(outfile)){
+
+        sf::st_write(streams_proj,
+                     dsn = outfile,
+                     layer = 'streams',
+                     driver = 'ESRI Shapefile',
+                     delete_layer = TRUE,
+                     quiet = TRUE)
+
+        message(paste('OSM streams layer written to', outfile))
+
+    } else {
+        return(streams_proj)
+    }
 }
