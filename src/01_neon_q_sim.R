@@ -27,7 +27,7 @@ options(readr.show_progress = FALSE,
         timeout = 3000)
 
 # set working directory wherever you'd like to build the file structure for this analysis.
-# no other paths need to be modified.
+# no other paths need to be modified. (except working directory in 01_neon_q_sim.R and 02_map_fig.R)
 setwd('~/git/macrosheds/papers/q_sim')
 
 source('src/00_helpers.R')
@@ -104,10 +104,12 @@ donor_gauges <- yaml::read_yaml('in/donor_gauges.yml')
 # formulaA <- 'discharge ~ {paste(gagenums, collapse = "+")} + season'
 formulaB <- 'discharge_log ~ `{paste(paste0(gagenums, "_log"), collapse = "`+`")}` + season'
 
-results_lm <- tibble(site_code = neon_sites, nse_logq = NA, nse_cv_logq = NA,
-                     bestmod_logq = NA, adj_r_squared = NA)
+results_lm <- results_lm_noscale <- tibble(
+    site_code = neon_sites, nse = NA, nse_cv = NA, kge = NA, kge_cv = NA,
+    pbias = NA, pbias_cv = NA, bestmod = NA, adj_r_squared = NA
+)
 
-## 3. linear regression (lm) ####
+## 3. linear regression (lm) on specific discharge ####
 
 # REDB ####
 neon_site = 'REDB'; gagenums = donor_gauges[[neon_site]]
@@ -517,7 +519,7 @@ results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 neon_site = 'CARI'; gagenums = donor_gauges[[neon_site]]
 lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
 mods = generate_nested_formulae(
-    full_spec = as.formula(glue(formulaB)),
+    full_spec = as.formula(glue(formulaC)),
     d = lm_df,
     min_points_per_param = 15,
     max_interaction = 3,
@@ -596,9 +598,374 @@ results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 # best = eval_model_set(data = lm_df, model_list = mods)
 # results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-## 4. write results ####
+## 4. linear regression (lm) on un-scaled discharge ####
 
-write_csv(results_lm, '../imputation/out/lm_out/results.csv')
+# REDB
+neon_site = 'REDB'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# remove erroneous outlier (both sites on same stream reach. one could not report >100L/s while the other reports <10L/s)
+lm_df = filter(lm_df, as.Date(datetime) != as.Date('2019-06-12'))
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df, interactions = TRUE, through_origin = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# HOPB
+neon_site = 'HOPB'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df, interactions = TRUE, through_origin = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# KING
+neon_site = 'KING'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# lm_df$`06879650`[lm_df$`06879650` > 1200 & ! is.na(lm_df$discharge)] = NA
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# BLUE
+neon_site = 'BLUE'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# CUPE
+neon_site = 'CUPE'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# GUIL
+neon_site = 'GUIL'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    interactions = TRUE,
+    min_points_per_param = 15,
+    max_interaction = 3)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# TECR [not yet viable. requires updated KREW donor gauges]
+# neon_site = 'TECR'; gagenums = c('11216400') #gagenums = 'T003'
+# lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# mods = generate_nested_formulae(
+#     full_spec = as.formula(glue(formulaB)),
+#     d = lm_df,
+#     interactions = TRUE)
+# best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+# results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# SYCA
+
+# neon_site = 'SYCA'; gagenums = c('09510200', '09499000') 09510150
+neon_site = 'SYCA'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# include_sensor_daterange = c('2019-06-01', '2020-07-01'))
+# ggplot(lm_df, aes(x=`09510200_log`, y = `discharge_log`)) + geom_point()
+
+# remove erroneous outlier (sites separated by < 10 km on same river with no major intervening tribs.
+#   very unlikely for one to report >100L/s while the other reports ~15L/s). This measurement also followed a long hiatus.
+lm_df = filter(lm_df, ! as.Date(datetime) == as.Date('2021-07-26'))
+
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    interactions = TRUE,
+    min_points_per_param = 15,
+    max_interaction = 3)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# WALK
+neon_site = 'WALK'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# TOMB
+# neon_site = 'TOMB'; gagenums = '02469525'
+neon_site = 'TOMB'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# ARIK
+neon_site = 'ARIK'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# include_sensor_data = TRUE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# MCDI
+neon_site = 'MCDI'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# include_pct_highvals = 5)
+# include_sensor_daterange = c('2018-11-01', '2019-10-01'))
+# ggplot(lm_df, aes(x=`06888500_log`, y = `discharge_log`)) + geom_point()
+# ggplot(lm_df, aes(x=`06879650_log`, y = `discharge_log`)) + geom_point()
+# lm_df = filter(lm_df, ! datetime %in% ymd_hms(c('2018-08-27 14:19:00', '2017-07-05 13:19:00', '2018-09-26 15:30:00')))
+lm_df = filter(lm_df, ! datetime %in% ymd_hms(c('2018-08-27 14:19:00', '2022-03-23 19:00:00')))
+
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# LECO
+neon_site = 'LECO'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# LEWI
+neon_site = 'LEWI'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# PRIN [very poor. maybe interpolation would help]
+# neon_site = 'PRIN'; gagenums = c('08044000', '08042950', '08042800')
+neon_site = 'PRIN'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# POSE
+neon_site = 'POSE'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# include_pct_highvals = 10)
+# include_sensor_daterange = c('2017-01-25', '2018-08-01'))
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    interactions = TRUE,
+    min_points_per_param = 15,
+    max_interaction = 3)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# BLDE
+neon_site = 'BLDE'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# include_sensor_daterange = c('2019-01-01', '2020-09-01'))
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# BLWA
+neon_site = 'BLWA'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# MCRA
+
+neon_site = 'MCRA'; gagenums = donor_gauges[[neon_site]]
+hja = read_csv('in/hjandrews_q.txt') %>%
+    filter(SITECODE %in% gagenums) %>%
+    select(datetime = DATE_TIME, SITECODE, INST_Q) %>%
+    mutate(INST_Q = INST_Q * 28.317) %>% #cfs to L/s
+    pivot_wider(names_from = SITECODE, values_from = INST_Q) %>%
+    arrange(datetime)
+lm_df = assemble_q_df(neon_site = neon_site, ms_Q_data = hja, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# BIGC [not yet viable. requires updated KREW donor gauges]
+# neon_site = 'BIGC'; gagenums = '11237500' #gagenums = c('P300', 'P301', 'P304') #gagenums = c('11238250')
+# lm_df = assemble_q_df_daily(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# mods = generate_nested_formulae(
+#     full_spec = as.formula(glue(formulaB)),
+#     d = lm_df,
+#     interactions = TRUE)
+# best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+# results_lm_noscale = plots_and_results_daily(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE) #STOP: this func needs update
+
+# MAYF
+neon_site = 'MAYF'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# OKSR
+neon_site = 'OKSR'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    interactions = TRUE,
+    max_interaction = 3)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# CARI
+neon_site = 'CARI'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaC)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# COMO [composite prediction]
+formulaC = "discharge_log ~ `{paste(paste0(gagenums, \"_log\"), collapse = \"`+`\")}`"
+
+neon_site = 'COMO'; gagenums = donor_gauges[[neon_site]][1:2]
+ms_d = ms_q %>%
+    filter(site_code %in% gagenums) %>%
+    mutate(date = as.Date(datetime)) %>%
+    select(date, site_code, val) %>%
+    pivot_wider(names_from = site_code, values_from = val) %>%
+    arrange(date)
+lm_df1 = assemble_q_df_daily(neon_site = neon_site, ms_Q_data = ms_d, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaC)),
+    d = lm_df1,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best1 = eval_model_set(data = lm_df1, model_list = mods, unscale_q_by_area = FALSE)
+
+neon_site = 'COMO'; gagenums = donor_gauges[[neon_site]]
+ms_d = ms_q %>%
+    filter(site_code %in% gagenums) %>%
+    mutate(date = as.Date(datetime)) %>%
+    select(date, site_code, val) %>%
+    pivot_wider(names_from = site_code, values_from = val) %>%
+    arrange(date)
+lm_df2 = assemble_q_df_daily(neon_site = neon_site, ms_Q_data = ms_d, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaC)),
+    d = lm_df2,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best2 = eval_model_set(data = lm_df2, model_list = mods, unscale_q_by_area = FALSE)
+
+results_lm_noscale = plots_and_results_daily_composite(neon_site, best1, best2, lm_df1, lm_df2, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# FLNT
+neon_site = 'FLNT'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# MART
+neon_site = 'MART'; gagenums = donor_gauges[[neon_site]]
+lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)#, include_pct_highvals = 10)
+mods = generate_nested_formulae(
+    full_spec = as.formula(glue(formulaB)),
+    d = lm_df,
+    min_points_per_param = 15,
+    max_interaction = 3,
+    interactions = TRUE)
+best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
+
+# WLOU [not yet viable. poor prediction and donor gauges missing seasons]
+# neon_site = 'WLOU'; gagenums = c('09026500', '09025300', '09027100', '09034900')
+# lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
+# mods = generate_nested_formulae(
+#     full_spec = as.formula(glue(formulaB)),
+#     d = lm_df,
+#     interactions = TRUE)
+# best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
+# results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
 
 ## 5. random forest regression (abandoned; poor predictions, esp. out of Q sample range) ####
 
