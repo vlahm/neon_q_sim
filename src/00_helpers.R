@@ -1304,7 +1304,7 @@ plots_and_results_daily <- function(neon_site, best, lm_df, results){
     return(results)
 }
 
-# misc plotting helpers
+# misc helpers required to generate figures
 
 dms_to_decdeg = function(x){
 
@@ -1402,4 +1402,25 @@ get_osm_streams <- function(extent_raster, outfile = NULL){
     } else {
         return(streams_proj)
     }
+}
+
+locate_test_results <- function(nh_dir, runid){
+
+    run_dirs <- list.files(nh_dir)
+
+    rundir <- grep(paste0('^run', runid, '_'), run_dirs, value = TRUE)
+    if(length(rundir) != 1){
+        warning('0 or multiple run dirs')
+        return()
+    }
+
+    testdir <- file.path('test', list.files(file.path(nh_dir, rundir, 'test')))
+    if(length(testdir) != 1){
+        warning('0 or multiple test dirs')
+        return()
+    }
+
+    res <- file.path(nh_dir, rundir, testdir, 'test_results.p')
+
+    return(res)
 }
