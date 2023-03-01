@@ -45,6 +45,12 @@ build_dir_structure <- function(){
     dir.create('out/lm_out/summary', showWarnings = FALSE)
 }
 
+rename_dir_structure <- function(){
+
+    file.rename('figs/lm_plots', 'figs/lm_plots_specQ')
+    file.rename('out/lm_out', 'out/lm_out_specQ')
+}
+
 # retrieval
 
 get_neon_field_discharge <- function(neon_sites){
@@ -722,8 +728,8 @@ plots_and_results <- function(neon_site, best, lm_df, results, return_plot = FAL
         full_join(select(best$lm_data, datetime, Q_neon_field), by = 'datetime') %>%
         select(datetime, Q_predicted = fit, #Q_used_in_regression = discharge,
                Q_pred_int_2.5 = lwr, Q_pred_int_97.5 = upr, Q_neon_field,
-               Q_neon_continuous_filtered = discharge_auto_qc,
-               Q_neon_continuous_raw = discharge_auto) %>%
+               # Q_neon_continuous_filtered = discharge_auto_qc,
+               Q_neon_continuous = discharge_auto) %>%
         filter(if_any(-datetime, ~cumsum(! is.na(.)) != 0)) %>%  #remove leading NA rows
         arrange(datetime)
 
@@ -1408,10 +1414,21 @@ locate_test_results <- function(nh_dir, runid){
 
     run_dirs <- list.files(nh_dir)
 
-    rundir <- grep(paste0('^run', runid, '_'), run_dirs, value = TRUE)
-    if(length(rundir) != 1){
-        warning('0 or multiple run dirs')
+    rundir <- grep(paste0('^finetune', runid, '_'), run_dirs, value = TRUE)
+    if(length(rundir) > 1){
+
+        warning('multiple finetune dirs')
         return()
+
+    } else if(length(rundir) == 0){
+
+        rundir <- grep(paste0('^run', runid, '_'), run_dirs, value = TRUE)
+        if(length(rundir) != 1){
+
+            warning('0 or multiple run dirs')
+            return()
+
+        }
     }
 
     testdir <- file.path('test', list.files(file.path(nh_dir, rundir, 'test')))
@@ -1423,4 +1440,120 @@ locate_test_results <- function(nh_dir, runid){
     res <- file.path(nh_dir, rundir, testdir, 'test_results.p')
 
     return(res)
+}
+
+retrieve_test_results <- function(runids){
+
+    nse_out <- kge_out <-
+        matrix(NA_real_,
+               nrow = length(neon_sites),
+               ncol = length(runids),
+               dimnames = list(neon_sites, NULL))
+
+    for(i in seq_along(runids)){
+
+        td <- try(locate_test_results(nh_dir, runids[i]), silent = TRUE)
+        if(inherits(td, 'try-error') || is.null(td)) next
+
+        xx = reticulate::py_load_object(td)
+
+        for(s in neon_sites){
+            try({
+                nse_out[rownames(nse_out) == s, i] <- xx[[paste0(s, '_MANUALQ')]]$`1D`$discharge_NSE
+            }, silent = TRUE)
+            try({
+                kge_out[rownames(kge_out) == s, i] <- xx[[paste0(s, '_MANUALQ')]]$`1D`$discharge_KGE
+            }, silent = TRUE)
+        }
+        # if(all(is.na(nse_out[, i]))) stop('no nse', i)
+        # if(all(is.na(kge_out[, i]))) stop('no kge', i)
+    }
+
+    return(list(nse = nse_out, kge = kge_out))
+}
+
+polygon_with_gaps <- function(df){
+
+    rl = rle(is.na(df$Q_pred_int_2.5))
+    vv = ! rl$values
+    chunkfac = rep(cumsum(vv), rl$lengths)
+    chunkfac[chunkfac == 0] = 1
+    chunks = split(df, chunkfac)
+    noNAchunks = lapply(chunks, function(x) x[!is.na(x$Q_pred_int_2.5),] )
+
+    for(i in 1:length(noNAchunks)){
+        polygon(x=c(noNAchunks[[i]]$datetime, rev(noNAchunks[[i]]$datetime)),
+                y=c(noNAchunks[[i]]$Q_pred_int_2.5, rev(noNAchunks[[i]]$Q_pred_int_97.5)),
+                col=adjustcolor('red', alpha.f=0.2), border=NA)
+    }
+}
+
+ts_plot <- function(site, yr, boldgray = FALSE, ymax = Inf, scaled = TRUE){
+
+    if(scaled){
+        pred <- read_csv(paste0('out/lm_out_specQ/predictions/', site, '.csv')) %>%
+            select(datetime, starts_with('Q_pred'), Q_neon_continuous_raw)
+        fit <- read_csv(paste0('out/lm_out_specQ/fit/', site, '.csv')) %>%
+            select(datetime, Q_neon_field)
+    } else {
+        pred <- read_csv(paste0('out/lm_out/predictions/', site, '.csv')) %>%
+            select(datetime, starts_with('Q_pred'), Q_neon_continuous_raw)
+        fit <- read_csv(paste0('out/lm_out/fit/', site, '.csv')) %>%
+            select(datetime, Q_neon_field)
+    }
+
+    plotd <- full_join(pred, fit, by = 'datetime') %>%
+        filter(datetime >= as.POSIXct(paste0(yr, '-01-01')),
+               datetime <= as.POSIXct(paste0(yr, '-12-31'))) %>%
+        arrange(datetime)
+
+    ymax_ <- max(c(plotd$Q_neon_continuous_raw, plotd$Q_pred_int_97.5, plotd$Q_neon_field), na.rm = TRUE)
+    rle_ <- rle2(as.numeric(month(plotd$datetime)))
+
+    if(nrow(rle_) < 12){
+        rle_ <- rle_[-1, ]
+    }
+
+    xaxis_labs <- substr(month.abb, 1, 1)[rle_$values]
+
+    plot(plotd$datetime, plotd$Q_neon_continuous_raw, type = 'n',
+         ylim = c(0, min(ymax_, ymax)),
+         xlab = '', ylab = '', xaxt = 'n')
+    axis(1, plotd$datetime[rle_$starts], xaxis_labs)
+    axis(1, plotd$datetime[rle_$stops[nrow(rle_)]], yr, tick = F, font = 2)
+    polygon_with_gaps(plotd)
+    if(boldgray){
+        lines(plotd$datetime, plotd$Q_neon_continuous_raw, col = 'gray50', lwd = 3)
+    } else {
+        lines(plotd$datetime, plotd$Q_neon_continuous_raw, col = 'gray50')
+    }
+    lines(plotd$datetime, plotd$Q_predicted, col = 'red')
+    points(plotd$datetime, plotd$Q_neon_field, col = 'black', pch = 1)
+    mtext(site, 3, -1, adj = 0.01, padj = 0.1)
+}
+
+rle2 <- function(x){
+
+    r <- rle(x)
+    ends <- cumsum(r$lengths)
+
+    r <- tibble(values = r$values,
+                starts = c(1, ends[-length(ends)] + 1),
+                stops = ends,
+                lengths = r$lengths)
+
+    return(r)
+}
+
+reduce_results <- function(res, name){
+
+    r_ <- suppressWarnings(apply(res, 1, max, na.rm = TRUE))
+
+    r_[is.infinite(r_)] <- NA
+
+    out <- tibble(site = names(r_),
+                  x = unname(r_)) %>%
+        rename(!!sym(name) := x)
+
+    return(out)
 }

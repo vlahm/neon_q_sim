@@ -1,6 +1,6 @@
 # Mike Vlah
 # vlahm13@gmail.com
-# last edit: 2023-02-26
+# last edit: 2023-02-28
 
 library(tidyverse)
 library(macrosheds)
@@ -30,72 +30,70 @@ source('src/00_helpers.R')
 
 ## 1. setup ####
 
+pal <- viridis::viridis(5, end = 1)
+
 neon_sites <- read_csv('in/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     pull(SiteID)
 
-#lm result tables
-results_specq <- read_csv('out/lm_out/results_specificq.csv')
-results_q <- read_csv('out/lm_out/results.csv')
-
-#matrices for holding individual eval metrics
-lstm_gen_nse <- lstm_gen_kge <- lstm_spec_nse <- lstm_spec_kge <- lstm_pgdl_nse <- lstm_pdgl_kge <-
-    matrix(NA_real_,
-           nrow = length(neon_sites),
-           ncol = length(generalist_runids),
-           dimnames = list(neon_sites, NULL))
-
-#plottable results data.frame
+#initialize results data.frame
 plotd <- matrix(
-    NA_real_, nrow = 27, ncol = 11,
+    NA_real_, nrow = 27, ncol = 5,
     dimnames = list(
         NULL,
-        c('site', 'nse_lm', 'nse_lm_scaled', 'nse_gen', 'nse_spec', 'nse_pgdl',
-          'kge_lm', 'kge_lm_scaled', 'kge_gen', 'kge_spec', 'kge_pgdl')
+        c('site', 'nse_lm', 'nse_lm_scaled', 'kge_lm', 'kge_lm_scaled')
+        # c('site', 'nse_lm', 'nse_lm_scaled', 'nse_gen', 'nse_spec', 'nse_pgdl',
+        #   'kge_lm', 'kge_lm_scaled', 'kge_gen', 'kge_spec', 'kge_pgdl')
     )
 ) %>% as_tibble()
 
 plotd$site <- neon_sites
 
-## 2. compile generalist results ####
+# 2. compile lm results ####
 
-for(i in seq_along(generalist_runids)){
+results_specq <- read_csv('out/lm_out_specQ/results_specificq.csv')
+results_q <- read_csv('out/lm_out/results.csv')
 
-    td <- try(locate_test_results(nh_dir, generalist_runids[i]), silent = TRUE)
-    if(inherits(td, 'try-error') || is.null(td)) next
-
-    xx = reticulate::py_load_object(td)
-
-    for(s in neon_sites){
-        try({
-            lstm_gen_nse[rownames(lstm_gen_nse) == s, i] <- xx[[paste0(s, '_MANUALQ')]]$`1D`$discharge_NSE
-            lstm_gen_kge[rownames(lstm_gen_nse) == s, i] <- xx[[paste0(s, '_MANUALQ')]]$`1D`$discharge_KGE
-        }, silent = TRUE)
-    }
-}
-
-## 2. assemble table of compiled results ####
-
-#lm
-
-#UPDATE THIS: read results.csv and results_noscale.csv. separate bars for each.
-#line plot might be more effective? nah.
-#order by mean kge across all 5 models
-
-fs <- list.files('out/lm_out/fit', full.names = TRUE)
 for(s in plotd$site){
+
     i <- which(plotd[, 'site'] == s)
-    # predobs <- try(read_csv(glue('out/lm_out/fit/{s}.csv')), silent = TRUE)
+
     plotd$nse_lm_scaled[i] <- filter(results_specq, site_code == !!s) %>% pull(nse)
     plotd$nse_lm[i] <- filter(results_q, site_code == !!s) %>% pull(nse)
     plotd$kge_lm_scaled[i] <- filter(results_specq, site_code == !!s) %>% pull(kge)
     plotd$kge_lm[i] <- filter(results_q, site_code == !!s) %>% pull(kge)
-
-    # plotd$nse_gen <-
-    xx = reticulate::py_load_object(file.path(nh_dir, 'run1361_1907_032422/test/model_epoch030/test_results.p'))
-
-    pred = xx[[paste0(s, '_GAPPED')]]$`1D`$xr$discharge_sim$to_pandas()
-
 }
 
+## 3. compile LSTM results ####
 
+gen_res <- retrieve_test_results(generalist_runids)
+spec_res <- retrieve_test_results(specialist_runids)
+pgdl_res <- retrieve_test_results(pgdl_runids)
+
+c('site', 'nse_lm', 'nse_lm_scaled', 'nse_gen', 'nse_spec', 'nse_pgdl',
+  'kge_lm', 'kge_lm_scaled', 'kge_gen', 'kge_spec', 'kge_pgdl')
+
+plotd <- left_join(plotd, reduce_results(gen_res$nse, 'nse_gen'))
+plotd <- left_join(plotd, reduce_results(gen_res$kge, 'kge_gen'))
+plotd <- left_join(plotd, reduce_results(spec_res$nse, 'nse_spec'))
+plotd <- left_join(plotd, reduce_results(spec_res$kge, 'kge_spec'))
+plotd <- left_join(plotd, reduce_results(pgdl_res$nse, 'nse_pgdl'))
+plotd <- left_join(plotd, reduce_results(pgdl_res$kge, 'kge_pgdl'))
+
+# 4. plot ####
+plotd_nse <- select(plotd, -contains('kge'))
+plotd_nse$rowmax <- apply(plotd_nse[, -1], 1, max, na.rm = TRUE)
+plotd_nse <- arrange(plotd_nse, desc(rowmax))
+plotd_m <- as.matrix(select(plotd_nse, -site, -rowmax))
+plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
+plotd_m <- t(plotd_m)
+rownames(plotd_m) <- c('linreg', 'linreg scaled', 'LSTM generalist', 'LSTM specialist', 'LSTM process-guided')
+
+png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
+    filename = 'figs/fig2.png')
+barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd$site,
+        col = pal, las = 2, ylab = 'Nash-Sutcliffe Efficiency',
+        legend.text = TRUE, border = FALSE,
+        args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
+                           xpd = NA, ncol = 3))
+dev.off()

@@ -27,7 +27,7 @@ options(readr.show_progress = FALSE,
         timeout = 3000)
 
 # set working directory wherever you'd like to build the file structure for this analysis.
-# no other paths need to be modified. (except working directory in 01_neon_q_sim.R and 02_map_fig.R)
+# no other paths need to be modified. (except working directory in the plotting scripts)
 setwd('~/git/macrosheds/papers/q_sim')
 
 source('src/00_helpers.R')
@@ -101,8 +101,11 @@ donor_gauges <- yaml::read_yaml('in/donor_gauges.yml')
 
 ## 2. run setup ####
 
+build_dir_structure()
+
 # formulaA <- 'discharge ~ {paste(gagenums, collapse = "+")} + season'
 formulaB <- 'discharge_log ~ `{paste(paste0(gagenums, "_log"), collapse = "`+`")}` + season'
+formulaC = "discharge_log ~ `{paste(paste0(gagenums, \"_log\"), collapse = \"`+`\")}`"
 
 results_lm <- results_lm_noscale <- tibble(
     site_code = neon_sites, nse = NA, nse_cv = NA, kge = NA, kge_cv = NA,
@@ -528,7 +531,6 @@ best = eval_model_set(data = lm_df, model_list = mods)
 results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
 # COMO [composite prediction] ####
-formulaC = "discharge_log ~ `{paste(paste0(gagenums, \"_log\"), collapse = \"`+`\")}`"
 
 neon_site = 'COMO'; gagenums = donor_gauges[[neon_site]][1:2]
 ms_d = ms_q %>%
@@ -599,6 +601,10 @@ results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 # results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
 ## 4. linear regression (lm) on un-scaled discharge ####
+
+rename_dir_structure()
+build_dir_structure()
+# results_lm_noscale <- read_csv('out/lm_out/results.csv')
 
 # REDB
 neon_site = 'REDB'; gagenums = donor_gauges[[neon_site]]
@@ -897,7 +903,6 @@ best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE
 results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
 
 # COMO [composite prediction]
-formulaC = "discharge_log ~ `{paste(paste0(gagenums, \"_log\"), collapse = \"`+`\")}`"
 
 neon_site = 'COMO'; gagenums = donor_gauges[[neon_site]][1:2]
 ms_d = ms_q %>%
