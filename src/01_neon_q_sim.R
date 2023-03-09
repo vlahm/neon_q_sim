@@ -42,6 +42,12 @@ if(! file.exists('in/neon_site_info.csv')){
                   destfile = 'in/neon_site_info.csv')
 }
 
+if(! file.exists('in/neon_site_info2.csv')){
+    #filename changes with every update, so might have to modify URL below
+    download.file('https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20220412.csv',
+                  destfile = 'in/neon_site_info2.csv')
+}
+
 neon_areas <- read_csv('in/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     mutate(ws_area_ha = WSAreaKm2 * 100) %>%

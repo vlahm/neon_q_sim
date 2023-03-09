@@ -1479,12 +1479,43 @@ polygon_with_gaps <- function(df){
     chunkfac = rep(cumsum(vv), rl$lengths)
     chunkfac[chunkfac == 0] = 1
     chunks = split(df, chunkfac)
-    noNAchunks = lapply(chunks, function(x) x[!is.na(x$Q_pred_int_2.5),] )
+    noNAchunks = lapply(chunks, function(x) x[! is.na(x$Q_pred_int_2.5), ])
 
     for(i in 1:length(noNAchunks)){
         polygon(x=c(noNAchunks[[i]]$datetime, rev(noNAchunks[[i]]$datetime)),
                 y=c(noNAchunks[[i]]$Q_pred_int_2.5, rev(noNAchunks[[i]]$Q_pred_int_97.5)),
                 col=adjustcolor('red', alpha.f=0.2), border=NA)
+    }
+}
+
+polygon_with_gaps2 <- function(df, gapcol, lowval, highval, col = 'blue'){
+
+    rl = rle(! is.na(df[[gapcol]]))
+    vv = ! rl$values
+    chunkfac = rep(cumsum(vv), rl$lengths)
+    chunkfac[chunkfac == 0] = 1
+    chunks = split(df, chunkfac)
+    NAchunks = lapply(chunks, function(x) x[is.na(x[[gapcol]]), ])
+    NAchunks = Filter(function(x) difftime(x$datetime[nrow(x)], x$datetime[1], units = 'hours') >= 6,
+                      NAchunks)
+
+    if(length(NAchunks)){
+
+        for(i in 1:length(NAchunks)){
+
+            d <- NAchunks[[i]]
+
+            # if(nrow(d) == 1 || difftime(d$datetime[nrow(d)], d$datetime[1], units = 'mins') < 60){
+            #     d <- bind_rows(d,
+            #                    mutate(d, datetime = datetime[1] + 60 * 60))
+            # }
+
+            polygon(x=c(d$datetime, rev(d$datetime)),
+                    y=c(rep(lowval, nrow(d)),
+                        rep(highval, nrow(d))),
+                    col=col, border=col)
+                    # col=adjustcolor(col, alpha.f=0.2), border=NA)
+        }
     }
 }
 
@@ -1545,9 +1576,9 @@ rle2 <- function(x){
     return(r)
 }
 
-reduce_results <- function(res, name){
+reduce_results <- function(res, name, f, ...){
 
-    r_ <- suppressWarnings(apply(res, 1, max, na.rm = TRUE))
+    r_ <- suppressWarnings(apply(res, 1, f, ...))
 
     r_[is.infinite(r_)] <- NA
 
