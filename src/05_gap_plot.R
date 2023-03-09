@@ -53,25 +53,43 @@ for(s in neon_sites){
 
 # 3. plot ####
 
-png(width = 8, height = 5, units = 'in', type = 'cairo', res = 300,
+png(width = 14, height = 10, units = 'in', type = 'cairo', res = 300,
     filename = 'figs/fig4.png')
-par(mfrow = c(length(neon_sites) / 2, 2), mar = c(2, 3, 1, 1), oma = c(2, 2, 2, 0))
-for(s in neon_sites){
+par(mfrow = c(14, 2), mar = c(2, 3, 1, 1), oma = c(2, 2, 2, 0))
+
+for(i in seq_along(neon_sites)){
+
+    if(i == 1){
+        plot(1, 1, type = 'n', ann = FALSE, axes = FALSE)
+        legend(x = 1, y = 2, bty = 'n', border = FALSE, horiz = TRUE, cex = 1.5,
+               legend = c('NEON missing', 'Reconstruction missing',
+                          'Both missing'),
+               fill = c('#bdd9ff', '#FFBDF9', '#c09eff'),
+               text.width = c(0.17, 0.25), xjust = 0.5, xpd = NA, x.intersp = 0.5)
+        legend(x = 1, y = 1.3, bty = 'n', border = FALSE, horiz = TRUE, cex = 1.5,
+               legend = c('NEON discharge', 'Reconstruction gapfill'),
+               col = c('gray60', 'black'), xjust = 0.5, lty = 1, lwd = 2,
+               xpd = NA, x.intersp = 0.5, seg.len = 1.5)
+    }
+
+    s <- neon_sites[i]
 
     d <- plotd[[s]] %>%
         filter(minute(datetime) %% 5 == 0) %>%
         mutate(discharge = neglog(discharge)) %>%
         tidyr::complete(datetime = seq(min(datetime), max(datetime), by = '5 min'))
 
-    dfill <- plotfill[[s]] %>%
-        mutate(across(any_of('date'), as_datetime)) %>%
-        rename_with(function(x) sub('^date$', 'datetime', x)) %>%
-        mutate(Q_predicted = neglog(Q_predicted)) %>%
-        filter(datetime > min(d$datetime),
-               datetime < max(d$datetime))
+    if(! inherits(plotfill[[s]], 'try-error')){
+        dfill <- plotfill[[s]] %>%
+            mutate(across(any_of('date'), as_datetime)) %>%
+            rename_with(function(x) sub('^date$', 'datetime', x)) %>%
+            mutate(Q_predicted = neglog(Q_predicted)) %>%
+            filter(datetime > min(d$datetime),
+                   datetime < max(d$datetime))
+    } else {
+        dfill <- NULL
+    }
         # tidyr::complete(datetime = seq(min(datetime), max(datetime), by = '5 min'))
-
-    missing_dts <- d$datetime[is.na(d$discharge)] ONLY PLOT POINTS IN BLUE POLYGONS
 
     plot(d$datetime, d$discharge, type = 'n',
          ylab = '', xlab = '', xaxt = 'n', yaxt = 'n', bty = 'n')
@@ -82,23 +100,50 @@ for(s in neon_sites){
         dboth$still_missing[dboth$still_missing] <- NA
 
         polygon_with_gaps2(dfill, 'Q_predicted', -100, 999999999, '#FFBDF9')
+
+        polygon_with_gaps2(d, 'discharge', -100, 999999999, '#bdd9ff')
+    } else {
+        polygon_with_gaps2(d, 'discharge', -100, 999999999, '#c09eff')
     }
 
-    polygon_with_gaps2(d, 'discharge', -100, 999999999, '#bdd9ff')
 
     if(! is.null(dfill)){
         polygon_with_gaps2(dboth, 'still_missing', -100, 999999999, '#c09eff')
     }
 
-    lines(d$datetime, d$discharge, col = 'gray60')
+    if(s == 'TOMB'){
+        dtomb <- filter(d, ! is.na(discharge))
+        lines(dtomb$datetime, dtomb$discharge, col = 'gray60')
+    } else {
+        lines(d$datetime, d$discharge, col = 'gray60')
+    }
 
     if(! is.null(dfill)){
-        points(dfill$datetime[dfill$datetime %in% missing_dts],
-              dfill$Q_predicted[dfill$datetime %in% missing_dts],
-              col = 'black', pch = '.')
+
+        rl = rle(! is.na(d$discharge))
+        vv = ! rl$values
+        chunkfac = rep(cumsum(vv), rl$lengths)
+        chunkfac[chunkfac == 0] = 1
+        chunks = split(d, chunkfac)
+        NAchunks = lapply(chunks, function(x) x[is.na(x$discharge), ])
+        NAchunks = Filter(function(x) difftime(x$datetime[nrow(x)], x$datetime[1], units = 'hours') >= 6,
+                          NAchunks)
+
+        if(length(NAchunks)){
+
+            for(i in 1:length(NAchunks)){
+
+                missing_dts <- NAchunks[[i]]$datetime[is.na(NAchunks[[i]]$discharge)]
+                points(dfill$datetime[dfill$datetime %in% missing_dts],
+                       dfill$Q_predicted[dfill$datetime %in% missing_dts],
+                       col = 'black', pch = '.')
+            }
+        }
     }
 
     mtext(s, side = 3, line = 0.2, adj = 0)
 }
-# mtext(expression('Discharge (Ls'^-1*')'), side = 2, outer = TRUE)
+
+mtext(expression('Log Discharge (Ls'^-1*')'), side = 2, outer = TRUE, cex = 1.2,
+      line = -1)
 dev.off()

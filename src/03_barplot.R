@@ -26,7 +26,7 @@ generalist_runids <- 1468:1520
 # specialist_runids <- c(1548:1627, 1748:1937) #search runs
 specialist_runids <- 2118:2247
 # pgdl_runids <- 2028:2117 #search runs
-pgdl_runids <-
+pgdl_runids <- 2248:2292
 
 source('src/00_helpers.R')
 

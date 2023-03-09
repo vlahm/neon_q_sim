@@ -103,7 +103,8 @@ get_neon_inst_discharge <- function(neon_sites){
         print(s)
 
         #continuous discharge measurements
-        qd = neonUtilities::loadByProduct('DP4.00130.001', site = s, check.size = FALSE)
+        qd = neonUtilities::loadByProduct('DP4.00130.001', site = s, check.size = FALSE,
+                                          release = 'RELEASE-2023')
 
         q1 = q2 = tibble()
         try({
@@ -1488,14 +1489,26 @@ polygon_with_gaps <- function(df){
     }
 }
 
-polygon_with_gaps2 <- function(df, gapcol, lowval, highval, col = 'blue'){
+polygon_with_gaps2 <- function(df, gapcol, lowval, highval, col = 'blue',
+                               invert = FALSE, border = col){
 
-    rl = rle(! is.na(df[[gapcol]]))
+    if(invert){
+        rl = rle(is.na(df[[gapcol]]))
+    } else {
+        rl = rle(! is.na(df[[gapcol]]))
+    }
+
     vv = ! rl$values
     chunkfac = rep(cumsum(vv), rl$lengths)
     chunkfac[chunkfac == 0] = 1
     chunks = split(df, chunkfac)
-    NAchunks = lapply(chunks, function(x) x[is.na(x[[gapcol]]), ])
+
+    if(invert){
+        NAchunks = lapply(chunks, function(x) x[! is.na(x[[gapcol]]), ])
+    } else {
+        NAchunks = lapply(chunks, function(x) x[is.na(x[[gapcol]]), ])
+    }
+
     NAchunks = Filter(function(x) difftime(x$datetime[nrow(x)], x$datetime[1], units = 'hours') >= 6,
                       NAchunks)
 
@@ -1513,7 +1526,7 @@ polygon_with_gaps2 <- function(df, gapcol, lowval, highval, col = 'blue'){
             polygon(x=c(d$datetime, rev(d$datetime)),
                     y=c(rep(lowval, nrow(d)),
                         rep(highval, nrow(d))),
-                    col=col, border=col)
+                    col=col, border=border)
                     # col=adjustcolor(col, alpha.f=0.2), border=NA)
         }
     }
