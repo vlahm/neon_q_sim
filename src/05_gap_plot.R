@@ -33,7 +33,7 @@ neon_sites <- read_csv('in/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     pull(SiteID)
 
-# 2. data prep ####
+## 2. data prep ####
 
 plotd <- list()
 for(s in neon_sites){
@@ -51,26 +51,14 @@ for(s in neon_sites){
                          silent = TRUE)
 }
 
-# 3. plot ####
+## 3. plot ####
 
-png(width = 14, height = 10, units = 'in', type = 'cairo', res = 300,
-    filename = 'figs/fig4.png')
-par(mfrow = c(14, 2), mar = c(2, 3, 1, 1), oma = c(2, 2, 2, 0))
+neon_sites <- sort(neon_sites)
 
+png(width = 8, height = 12, units = 'in', type = 'cairo', res = 300,
+    filename = 'figs/fig4v2.png')
+par(mfrow = c(27, 1), mar = c(1, 3, 0, 0), oma = c(2, 2, 2, 10))
 for(i in seq_along(neon_sites)){
-
-    if(i == 1){
-        plot(1, 1, type = 'n', ann = FALSE, axes = FALSE)
-        legend(x = 1, y = 2, bty = 'n', border = FALSE, horiz = TRUE, cex = 1.5,
-               legend = c('NEON missing', 'Reconstruction missing',
-                          'Both missing'),
-               fill = c('#bdd9ff', '#FFBDF9', '#c09eff'),
-               text.width = c(0.17, 0.25), xjust = 0.5, xpd = NA, x.intersp = 0.5)
-        legend(x = 1, y = 1.3, bty = 'n', border = FALSE, horiz = TRUE, cex = 1.5,
-               legend = c('NEON discharge', 'Reconstruction gapfill'),
-               col = c('gray60', 'black'), xjust = 0.5, lty = 1, lwd = 2,
-               xpd = NA, x.intersp = 0.5, seg.len = 1.5)
-    }
 
     s <- neon_sites[i]
 
@@ -103,9 +91,9 @@ for(i in seq_along(neon_sites)){
 
         polygon_with_gaps2(d, 'discharge', -100, 999999999, '#bdd9ff')
     } else {
+        polygon_with_gaps2(d, 'discharge', -100, 999999999, '#FFBDF9', invert = TRUE)
         polygon_with_gaps2(d, 'discharge', -100, 999999999, '#c09eff')
     }
-
 
     if(! is.null(dfill)){
         polygon_with_gaps2(dboth, 'still_missing', -100, 999999999, '#c09eff')
@@ -131,9 +119,9 @@ for(i in seq_along(neon_sites)){
 
         if(length(NAchunks)){
 
-            for(i in 1:length(NAchunks)){
+            for(j in 1:length(NAchunks)){
 
-                missing_dts <- NAchunks[[i]]$datetime[is.na(NAchunks[[i]]$discharge)]
+                missing_dts <- NAchunks[[j]]$datetime[is.na(NAchunks[[j]]$discharge)]
                 points(dfill$datetime[dfill$datetime %in% missing_dts],
                        dfill$Q_predicted[dfill$datetime %in% missing_dts],
                        col = 'black', pch = '.')
@@ -141,9 +129,26 @@ for(i in seq_along(neon_sites)){
         }
     }
 
-    mtext(s, side = 3, line = 0.2, adj = 0)
+    if(i == 1){
+        legend(x = as.POSIXct('2021-09-30'), y = -90, bty = 'n', border = FALSE, cex = 1.5,
+               legend = c('NEON\nmissing', 'Reconstruction\nmissing',
+                          'Both\nmissing'),
+               fill = c('#bdd9ff', '#FFBDF9', '#c09eff'),
+               xpd = NA, x.intersp = 1.1, y.intersp = 2)
+        legend(x = as.POSIXct('2021-09-19'), y = -125, bty = 'n', border = FALSE, cex = 1.5,
+               legend = c('NEON\ndischarge', 'Reconstruction\ngapfill'),
+               col = c('gray60', 'black'), lty = 1, lwd = 2, xpd = NA,
+               seg.len = 1.2, y.intersp = 2)
+    }
+
+    mtext(s, side = 2, las = 1, line = -1.2)
 }
 
 mtext(expression('Log Discharge (Ls'^-1*')'), side = 2, outer = TRUE, cex = 1.2,
-      line = -1)
+      line = -0.5)
+
 dev.off()
+
+
+## 4. gap stats ####
+

@@ -6,6 +6,7 @@ library(tidyverse)
 library(macrosheds)
 library(glue)
 library(reticulate)
+library(data.table)
 
 reticulate::use_condaenv('nh2')
 xr <- reticulate::import("xarray")
@@ -32,7 +33,7 @@ source('src/00_helpers.R')
 
 ## 1. setup ####
 
-pal <- c('black', viridis::viridis(5, end = 1))
+pal <- c('black', rev(viridis::viridis(5, begin = 0.1, end = 1)))
 
 if(! file.exists('in/neon_site_info.csv')){
     download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
@@ -113,7 +114,22 @@ for(s in plotd$site){
         filter(! is.na(discharge)) %>%
         select(-site_code)
 
-    cmp <- left_join(neon_q_manual, neon_q_auto, by = 'datetime', suffix = c('.man', '.aut'))
+    if(s == 'TOMB'){
+
+        cmp <- approxjoin_datetime(
+                x = mutate(neon_q_manual, site_code = s, var = 'discharge') %>%
+                    rename(val = discharge),
+                y = mutate(neon_q_auto, site_code = s, var = 'discharge') %>%
+                    rename(val = discharge),
+                rollmax = '12:00:00'
+            ) %>%
+            as_tibble() %>%
+            select(datetime, discharge.man = val_x, discharge.aut = val_y)
+
+    } else {
+
+        cmp <- left_join(neon_q_manual, neon_q_auto, by = 'datetime', suffix = c('.man', '.aut'))
+    }
 
     plotd[i, 'nse_neon'] <- hydroGOF::NSE(cmp$discharge.aut, cmp$discharge.man)
     plotd[i, 'kge_neon'] <- hydroGOF::KGE(cmp$discharge.aut, cmp$discharge.man)
@@ -121,13 +137,16 @@ for(s in plotd$site){
 
 ## 5. figure 2 ####
 
+# plotd <- select(plotd, site, nse_neon, kge_neon, nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl,
+#                 kge_pgdl, nse_lm, kge_lm, nse_lm_scaled, kge_lm_scaled)
 plotd <- select(plotd, site, nse_neon, kge_neon, nse_lm, kge_lm, nse_lm_scaled,
                 kge_lm_scaled, nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl,
                 kge_pgdl)
 
 plotd_nse <- select(plotd, -contains('kge'))
 plotd_nse$rowmax <- apply(select(plotd_nse, -site), 1, max, na.rm = TRUE)
-plotd_nse <- arrange(plotd_nse, desc(rowmax))
+plotd_nse <- arrange(plotd_nse, desc(nse_neon))
+# plotd_nse <- arrange(plotd_nse, desc(rowmax))
 plotd_m <- as.matrix(select(plotd_nse, -site, -rowmax))
 plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
 plotd_m <- t(plotd_m)
@@ -135,9 +154,16 @@ rownames(plotd_m) <- c('Published', 'Linreg', 'Linreg scaled', 'LSTM generalist'
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
     filename = 'figs/fig2_withneon.png')
+plot(1:230, rep(0.5, 230), ylim = c(0, 1), ann = FALSE, axes = FALSE, col = 'transparent')
+gray_bar_seq <- seq(0.2, 238, 17)
+for(i in 1:14){
+    ix <- gray_bar_seq[i] + i / 11
+    polygon(c(ix, ix + 8.3, ix + 8.3, ix), c(-0.1, -0.1, 1.04, 1.04), col = 'gray85', border = FALSE, xpd = NA)
+}
+par(new = TRUE)
 barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_nse$site,
         col = pal, las = 2, ylab = 'Nash-Sutcliffe Efficiency',
-        legend.text = TRUE, border = FALSE,
+        legend.text = TRUE, border = 'transparent',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
                            xpd = NA, ncol = 3))
 dev.off()
@@ -152,9 +178,16 @@ rownames(plotd_m) <- c('Published', 'Linreg', 'Linreg scaled', 'LSTM generalist'
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
     filename = 'figs/fig2_kge_withneon.png')
+plot(1:230, rep(0.5, 230), ylim = c(0, 1), ann = FALSE, axes = FALSE, col = 'transparent')
+gray_bar_seq <- seq(0.2, 238, 17)
+for(i in 1:14){
+    ix <- gray_bar_seq[i] + i / 11
+    polygon(c(ix, ix + 8.3, ix + 8.3, ix), c(-0.36, -0.36, 1.04, 1.04), col = 'gray85', border = FALSE, xpd = NA)
+}
+par(new = TRUE)
 barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_kge$site,
         col = pal, las = 2, ylab = 'Kling-Gupta Efficiency',
-        legend.text = TRUE, border = FALSE,
+        legend.text = TRUE, border = 'transparent',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
                            xpd = NA, ncol = 3))
 dev.off()
@@ -173,3 +206,6 @@ plotd %>%
     pivot_wider(names_from = c('stat', 'score'), values_from = 'value') %>%
     mutate(across(where(is.numeric), ~round(., 3))) %>%
     write_csv('out/score_table.csv')
+
+## 7. stats ####
+

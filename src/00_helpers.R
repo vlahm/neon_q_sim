@@ -55,38 +55,70 @@ rename_dir_structure <- function(){
 
 get_neon_field_discharge <- function(neon_sites){
 
-    dir.create('in/neon_field_Q')
+    dir.create('in/neon_field_Q', showWarnings = FALSE)
 
     for(i in seq_along(neon_sites)){
 
-        s = neon_sites[i]
+        s <- neon_sites[i]
         print(s)
 
         #field discharge measurements
-        qd = neonUtilities::loadByProduct('DP1.20048.001', site = s, check.size = FALSE)
-
-        q1 = q2 = tibble()
-        try({
-            q1 = select(qd$dsc_fieldDataADCP, discharge = totalDischarge, date = startDate, totalDischargeUnits)
-        }, silent = TRUE)
-        try({
-            q2 = select(qd$dsc_fieldData, discharge = totalDischarge, date = startDate, totalDischargeUnits)
-        }, silent = TRUE)
-        if(nrow(q1) && nrow(q2)){
-            q = bind_rows(q1, q2)
-        } else if(nrow(q1)){
-            q = q1
+        ff <- paste0('field_q_rds_files/', s, '.rds')
+        if(file.exists(ff)){
+            qd <- readRDS(ff)
         } else {
-            q = q2
+            qd <- neonUtilities::loadByProduct('DP1.20048.001', site = s, check.size = FALSE)
+            saveRDS(qd, paste0('field_q_rds_files/', s, '.rds'))
+        }
+
+        q1 <- q2 <- tibble()
+        try({
+
+            flag1 <- qd$dsc_fieldDataADCP[['totalDischargeCalcQF']]
+            flag2 <- qd$dsc_fieldDataADCP[['dataQF']]
+            if('finalDischarge' %in% colnames(qd$dsc_fieldDataADCP)) stop()
+            q1 <- select(qd$dsc_fieldDataADCP, discharge1 = totalDischarge,
+                         date = startDate, totalDischargeUnits) %>%
+                mutate(discharge2 = NA_real_)
+            q1$flag1 <- if(! is.null(flag1)) as.numeric(flag1) else rep(NA_real_, nrow(q1))
+            q1$flag2 <- if(! is.null(flag2)) as.numeric(flag2) else rep(NA_real_, nrow(q1))
+
+        }, silent = TRUE)
+
+        try({
+
+            flag1 <- qd$dsc_fieldData[['totalDischargeCalcQF']]
+            flag2 <- qd$dsc_fieldData[['dataQF']]
+            q2 <- select(qd$dsc_fieldData, discharge1 = totalDischarge, discharge2 = finalDischarge,
+                         date = startDate, totalDischargeUnits)
+            q2$flag1 <- if(! is.null(flag1)) as.numeric(flag2) else rep(NA_real_, nrow(q2))
+            q2$flag2 <- if(! is.null(flag2)) as.numeric(flag2) else rep(NA_real_, nrow(q2))
+
+        }, silent = TRUE)
+
+        if(nrow(q1) && nrow(q2)){
+            q <- bind_rows(q1, q2)
+        } else if(nrow(q1)){
+            q <- q1
+        } else {
+            q <- q2
         }
 
         if(any(! q$totalDischargeUnits %in% c('cubicMetersPerSecond', 'litersPerSecond'))) stop('new unit detected. account for this.')
 
-        q = q %>%
-            mutate(discharge = ifelse(totalDischargeUnits == 'cubicMetersPerSecond', discharge * 1000, discharge),
-                   site_code = s) %>%
-            rename(datetime = date) %>%
-            select(-totalDischargeUnits) %>%
+        q <- mutate(q, discharge1 = ifelse(totalDischargeUnits == 'cubicMetersPerSecond', discharge1 * 1000, discharge1))
+        # q[is.na(q$discharge1) + is.na(q$discharge2) == 1, ]
+        q$discharge <- q$discharge2
+        missing_or_bogus <- is.na(q$discharge) | q$discharge < 0
+        q$discharge[missing_or_bogus] <- q$discharge1[missing_or_bogus]
+
+        print(paste('removing', sum(! is.na(q$flag2) & q$flag2 == 1), 'rows'))
+
+        q <- q %>%
+            filter(discharge >= 0,
+                   is.na(flag2) | flag2 <= 0) %>%
+            select(datetime = date, discharge) %>%
+            mutate(site_code = s) %>%
             as_tibble()
 
         write_csv(q, glue('in/neon_field_Q/{s}.csv'))
@@ -347,7 +379,16 @@ generate_nested_formulae <- function(full_spec, d,
                                      min_points_per_param = 15,
                                      max_interaction = Inf){
 
-    #this one allows all interactions if interactions == TRUE
+    #full_spec: a formula representing the full model specification (all possible predictors)
+    #d: a data frame. must include dependent variable from full_spec as a column name
+    #interactions: are interaction terms allowed? see max_interaction
+    #through_origin: should 0-intercept models be generated?
+    #min_points_per_param: at least this many data points must be present for each
+    #   parameter included in resulting formulae.
+    #max_interaction: the maximum number of terms that may interact, e.g. if 3,
+    #   then formulae with x:y:z:w will be filtered from the results.
+
+    #returns a list of formulae
 
     trms = rownames(attributes(terms(full_spec))$factors)
 
@@ -369,6 +410,8 @@ generate_nested_formulae <- function(full_spec, d,
 
     max_params = sum(! is.na(d[[y_nobacktick]])) %/% min_points_per_param #https://statisticsbyjim.com/regression/overfitting-regression-models/
     indeps = Filter(function(x) length(x) <= max_params, indeps)
+
+    if(! length(indeps)) stop('not enough data')
 
     mods = list()
     modind = 0
@@ -419,6 +462,11 @@ generate_nested_formulae <- function(full_spec, d,
     is_through_origin = sapply(mods, function(x) grepl('^0 +', as.character(x)[3]))
     param_counts = param_counts - is_through_origin
     mods = mods[param_counts <= max_params]
+
+    mods <- Filter(function(x){
+        trms <- attr(terms(x), 'term.labels')
+        length(trms) > 1 || trms != 'season'
+    }, mods)
 
     return(mods)
 }
@@ -1600,4 +1648,225 @@ reduce_results <- function(res, name, f, ...){
         rename(!!sym(name) := x)
 
     return(out)
+}
+
+approxjoin_datetime <- function(x,
+                                y,
+                                rollmax = '7:30',
+                                keep_datetimes_from = 'x',
+                                indices_only = FALSE){
+    #direction = 'forward'){
+
+    #x and y: macrosheds standard tibbles with only one site_code,
+    #   which must be the same in x and y. Nonstandard tibbles may also work,
+    #   so long as they have datetime columns, but the only case where we need
+    #   this for other tibbles is inside precip_pchem_pflux_idw, in which case
+    #   indices_only == TRUE, so it's not really set up for general-purpose joining
+    #rollmax: the maximum snap time for matching elements of x and y.
+    #   either '7:30' for continuous data or '12:00:00' for grab data
+    #direction [REMOVED]: either 'forward', meaning elements of x will be rolled forward
+    #   in time to match the next y, or 'backward', meaning elements of
+    #   x will be rolled back in time to reach the previous y
+    #keep_datetimes_from: string. either 'x' or 'y'. the datetime column from
+    #   the corresponding tibble will be kept, and the other will be dropped
+    #indices_only: logical. if TRUE, a join is not performed. rather,
+    #   the matching indices from each tibble are returned as a named list of vectors..
+
+    #good datasets for testing this function:
+    # x <- tribble(
+    #     ~datetime, ~site_code, ~var, ~val, ~ms_status, ~ms_interp,
+    #     '1968-10-09 04:42:00', 'GSWS10', 'GN_alk', set_errors(27.75, 1), 0, 0,
+    #     '1968-10-09 04:44:00', 'GSWS10', 'GN_alk', set_errors(21.29, 1), 0, 0,
+    #     '1968-10-09 04:47:00', 'GSWS10', 'GN_alk', set_errors(21.29, 1), 0, 0,
+    #     '1968-10-09 04:59:59', 'GSWS10', 'GN_alk', set_errors(16.04, 1), 0, 0,
+    #     '1968-10-09 05:15:01', 'GSWS10', 'GN_alk', set_errors(17.21, 1), 1, 0,
+    #     '1968-10-09 05:30:59', 'GSWS10', 'GN_alk', set_errors(16.50, 1), 0, 0) %>%
+    # mutate(datetime = as.POSIXct(datetime, tz = 'UTC'))
+    # y <- tribble(
+    #     ~datetime, ~site_code, ~var, ~val, ~ms_status, ~ms_interp,
+    #     '1968-10-09 04:00:00', 'GSWS10', 'GN_alk', set_errors(1.009, 1), 1, 0,
+    #     '1968-10-09 04:15:00', 'GSWS10', 'GN_alk', set_errors(2.009, 1), 1, 1,
+    #     '1968-10-09 04:30:00', 'GSWS10', 'GN_alk', set_errors(3.009, 1), 1, 1,
+    #     '1968-10-09 04:45:00', 'GSWS10', 'GN_alk', set_errors(4.009, 1), 1, 1,
+    #     '1968-10-09 05:00:00', 'GSWS10', 'GN_alk', set_errors(5.009, 1), 1, 1,
+    #     '1968-10-09 05:15:00', 'GSWS10', 'GN_alk', set_errors(6.009, 1), 1, 1) %>%
+    #     mutate(datetime = as.POSIXct(datetime, tz = 'UTC'))
+
+    #tests
+    if('site_code' %in% colnames(x) && length(unique(x$site_code)) > 1){
+        stop('Only one site_code allowed in x at the moment')
+    }
+    if('var' %in% colnames(x) && length(unique(drop_var_prefix(x$var))) > 1){
+        stop('Only one var allowed in x at the moment (not including prefix)')
+    }
+    if('site_code' %in% colnames(y) && length(unique(y$site_code)) > 1){
+        stop('Only one site_code allowed in y at the moment')
+    }
+    if('var' %in% colnames(y) && length(unique(drop_var_prefix(y$var))) > 1){
+        stop('Only one var allowed in y at the moment (not including prefix)')
+    }
+    if('site_code' %in% colnames(x) &&
+       'site_code' %in% colnames(y) &&
+       x$site_code[1] != y$site_code[1]) stop('x and y site_code must be the same')
+    if(! rollmax %in% c('7:30', '12:00:00')) stop('rollmax must be "7:30" or "12:00:00"')
+    # if(! direction %in% c('forward', 'backward')) stop('direction must be "forward" or "backward"')
+    if(! keep_datetimes_from %in% c('x', 'y')) stop('keep_datetimes_from must be "x" or "y"')
+    if(! 'datetime' %in% colnames(x) || ! 'datetime' %in% colnames(y)){
+        stop('both x and y must have "datetime" columns containing POSIXct values')
+    }
+    if(! is.logical(indices_only)) stop('indices_only must be a logical')
+
+    #deal with the case of x or y being a specialized "flow" tibble
+    # x_is_flowtibble <- y_is_flowtibble <- FALSE
+    # if('flow' %in% colnames(x)) x_is_flowtibble <- TRUE
+    # if('flow' %in% colnames(y)) y_is_flowtibble <- TRUE
+    # if(x_is_flowtibble && ! y_is_flowtibble){
+    #     varname <- y$var[1]
+    #     y$var = NULL
+    # } else if(y_is_flowtibble && ! x_is_flowtibble){
+    #     varname <- x$var[1]
+    #     x$var = NULL
+    # } else if(! x_is_flowtibble && ! y_is_flowtibble){
+    #     varname <- x$var[1]
+    #     x$var = NULL
+    #     y$var = NULL
+    # } else {
+    #     stop('x and y are both "flow" tibbles. There should be no need for this')
+    # }
+    # if(x_is_flowtibble) x <- rename(x, val = flow)
+    # if(y_is_flowtibble) y <- rename(y, val = flow)
+
+    #data.table doesn't work with the errors package, so error needs
+    #to be separated into its own column. also give same-name columns suffixes
+
+    if('val' %in% colnames(x)){
+
+        x <- x %>%
+            # mutate(err = errors::errors(val),
+            #        val = errors::drop_errors(val)) %>%
+            rename_with(.fn = ~paste0(., '_x'),
+                        .cols = everything()) %>%
+            data.table::as.data.table()
+
+        y <- y %>%
+            # mutate(err = errors::errors(val),
+            #        val = errors::drop_errors(val)) %>%
+            rename_with(.fn = ~paste0(., '_y'),
+                        .cols = everything()) %>%
+            data.table::as.data.table()
+
+    } else {
+
+        if(indices_only){
+            x <- rename(x, datetime_x = datetime) %>%
+                # mutate(across(where(~inherits(., 'errors')),
+                #               ~errors::drop_errors(.))) %>%
+                data.table::as.data.table()
+
+            y <- rename(y, datetime_y = datetime) %>%
+                # mutate(across(where(~inherits(., 'errors')),
+                #               ~errors::drop_errors(.))) %>%
+                data.table::as.data.table()
+        } else {
+            stop('this case not yet handled')
+        }
+
+    }
+
+    #alternative implementation of the "on" argument in data.table joins...
+    #probably more flexible, so leaving it here in case we need to do something crazy
+    # data.table::setkeyv(x, 'datetime')
+    # data.table::setkeyv(y, 'datetime')
+
+    #convert the desired maximum roll distance from string to integer seconds
+    rollmax <- ifelse(test = rollmax == '7:30',
+                      yes = 7 * 60 + 30,
+                      no = 12 * 60 * 60)
+
+    #leaving this here in case the nearest neighbor join implemented below is too
+    #slow. then we can fall back to a basic rolling join with a maximum distance
+    # rollmax <- ifelse(test = direction == 'forward',
+    #                   yes = -rollmax,
+    #                   no = rollmax)
+    #rollends will move the first/last value of x in the opposite `direction` if necessary
+    # joined <- y[x, on = 'datetime', roll = rollmax, rollends = c(TRUE, TRUE)]
+
+    #create columns in x that represent the snapping window around each datetime
+    x[, `:=` (datetime_min = datetime_x - rollmax,
+              datetime_max = datetime_x + rollmax)]
+    y[, `:=` (datetime_y_orig = datetime_y)] #datetime col will be dropped from y
+
+    # if(indices_only){
+    #     y_indices <- y[x,
+    #                    on = .(datetime_y <= datetime_max,
+    #                           datetime_y >= datetime_min),
+    #                    which = TRUE]
+    #     return(y_indices)
+    # }
+
+    #join x rows to y if y's datetime falls within the x range
+    joined <- y[x, on = .(datetime_y <= datetime_max,
+                          datetime_y >= datetime_min)]
+    joined <- na.omit(joined, cols = 'datetime_y_orig') #drop rows without matches
+
+    #for any datetimes in x or y that were matched more than once, keep only
+    #the nearest match
+    joined[, `:=` (datetime_match_diff = abs(datetime_x - datetime_y_orig))]
+    joined <- joined[, .SD[which.min(datetime_match_diff)], by = datetime_x]
+    joined <- joined[, .SD[which.min(datetime_match_diff)], by = datetime_y_orig]
+
+    if(indices_only){
+        y_indices <- which(y$datetime_y %in% joined$datetime_y_orig)
+        x_indices <- which(x$datetime_x %in% joined$datetime_x)
+        return(list(x = x_indices, y = y_indices))
+    }
+
+    #drop and rename columns (data.table makes weird name modifications)
+    if(keep_datetimes_from == 'x'){
+        joined[, c('datetime_y', 'datetime_y.1', 'datetime_y_orig', 'datetime_match_diff') := NULL]
+        data.table::setnames(joined, 'datetime_x', 'datetime')
+    } else {
+        joined[, c('datetime_x', 'datetime_y.1', 'datetime_y', 'datetime_match_diff') := NULL]
+        data.table::setnames(joined, 'datetime_y_orig', 'datetime')
+    }
+
+    #restore error objects, var column, original column names (with suffixes).
+    #original column order
+    # joined <- tibble::as_tibble(joined) %>%
+    #     mutate(val_x = errors::set_errors(val_x, err_x),
+    #            val_y = errors::set_errors(val_y, err_y)) %>%
+    #     dplyr::select(-err_x, -err_y)
+    # mutate(var = !!varname)
+
+    # if(x_is_flowtibble) joined <- rename(joined,
+    #                                      flow = val_x,
+    #                                      ms_status_flow = ms_status_x,
+    #                                      ms_interp_flow = ms_interp_x)
+    # if(y_is_flowtibble) joined <- rename(joined,
+    #                                      flow = val_y,
+    #                                      ms_status_flow = ms_status_y,
+    #                                      ms_interp_flow = ms_interp_y)
+
+    # if(! sum(grepl('^val_[xy]$', colnames(joined))) > 1){
+    #     joined <- rename(joined, val = matches('^val_[xy]$'))
+    # }
+
+    joined <- dplyr::select(joined,
+                            datetime,
+                            # matches('^val_?[xy]?$'),
+                            # any_of('flow'),
+                            starts_with('site_code'),
+                            any_of(c(starts_with('var_'), matches('^var$'))),
+                            any_of(c(starts_with('val_'), matches('^val$'))),
+                            starts_with('ms_status_'),
+                            starts_with('ms_interp_'))
+
+    return(joined)
+}
+
+drop_var_prefix <- function(x){
+
+    unprefixed <- substr(x, 4, nchar(x))
+
+    return(unprefixed)
 }

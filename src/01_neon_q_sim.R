@@ -1,6 +1,6 @@
 # Mike Vlah
 # vlahm13@gmail.com
-# last data retrieval: 2023-01-31 (all files except hjandrews_q.txt, retrieved 2022-04-14)
+# last data retrieval dates given in comments below:
 # last edit: 2023-02-16
 
 library(dataRetrieval)
@@ -37,17 +37,20 @@ source('src/00_helpers.R')
 # NEON site metadata as reproduced by Rhea et al. 2023
 # (primary source here: https://www.neonscience.org/field-sites/explore-field-sites)
 
+#last retrieval: #2023-01-31
 if(! file.exists('in/neon_site_info.csv')){
     download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
                   destfile = 'in/neon_site_info.csv')
 }
 
+#last retrieval: #2023-01-31
 if(! file.exists('in/neon_site_info2.csv')){
     #filename changes with every update, so might have to modify URL below
     download.file('https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20220412.csv',
                   destfile = 'in/neon_site_info2.csv')
 }
 
+#last retrieval: #2023-01-31
 neon_areas <- read_csv('in/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     mutate(ws_area_ha = WSAreaKm2 * 100) %>%
@@ -57,26 +60,31 @@ neon_sites <- neon_areas$site_code
 
 # NEON discharge data (field measurements and continuous)
 
+#last retrieval: #2023-03-09
 if(! length(list.files('in/neon_continuous_Q/'))){
     get_neon_inst_discharge(neon_sites)
 }
 
+#last retrieval: #2023-01-31
 if(! length(list.files('in/neon_field_Q/'))){
     get_neon_field_discharge(neon_sites)
 }
 
 # NEON discharge evaluation results from Rhea et al. 2023
 
+#last retrieval: #2023-01-31
 if(! file.exists('in/neon_q_eval.csv')){
     download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_q_eval.csv',
                   destfile = 'in/neon_q_eval.csv')
 }
 
+#last retrieval: #2023-01-31
 q_eval <- read_csv('in/neon_q_eval.csv') %>%
     filter(site %in% neon_sites)
 
 # MacroSheds Q data from Niwot domain: used for donor gauges in lieu of USGS data
 
+#last retrieval: #2023-01-31
 if(! dir.exists('in/niwot')){
     macrosheds::ms_download_core_data(macrosheds_root = './in',
                                       domains = 'niwot')
@@ -89,6 +97,7 @@ ms_q <- macrosheds::ms_load_product(macrosheds_root = './in',
 
 # H. J. Andrews Experimental Forest Q data: used for donor gauges in lieu of USGS data
 
+#last retrieval: #2022-04-14
 if(! file.exists('in/hjandrews_q.txt')){
     download.file('https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-and.4341.33&entityid=86490799297ff361b0741b807804c43a',
                   destfile = 'in/hjandrews_q.txt')
