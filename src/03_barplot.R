@@ -25,7 +25,7 @@ nh_dir <- '../../qa_experimentation/imputation/src/nh_methods/runs'
 generalist_runids <- 1468:1520
 # specify run IDs for replicates of best model for each specialist type
 # specialist_runids <- c(1548:1627, 1748:1937) #search runs
-specialist_runids <- 2118:2247
+specialist_runids <- c(2118:2247, 2293:2397)
 # pgdl_runids <- 2028:2117 #search runs
 pgdl_runids <- 2248:2292
 
