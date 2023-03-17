@@ -209,3 +209,11 @@ plotd %>%
 
 ## 7. stats ####
 
+#number of field measurements per site
+n_field_meas <- sapply(
+    list.files('in/neon_field_Q', full.names = TRUE),
+    function(x) length(na.omit(read_csv(x)$discharge))
+) %>% sort()
+
+range(n_field_meas)
+mean(n_field_meas)
