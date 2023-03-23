@@ -22,13 +22,12 @@ library(macrosheds)
 #download.file(neon sites) for watershed areas
 #what about sites tkin and tkot?
 
+# NOTE: working directory is set by opening q_sim.Rproj. Alternatively, you may set it here.
+# setwd('path/to/q_sim')
+
 options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
-
-# set working directory wherever you'd like to build the file structure for this analysis.
-# no other paths need to be modified. (except working directory in the plotting scripts)
-setwd('~/git/macrosheds/papers/q_sim')
 
 source('src/00_helpers.R')
 

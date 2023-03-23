@@ -1,3 +1,6 @@
+#helper functions for the other R scripts. No need to source these directly.
+#start with 01_neon_q_sim.R
+
 #general
 
 Mode <- function(x, na.rm = TRUE){
@@ -1869,4 +1872,9 @@ drop_var_prefix <- function(x){
     unprefixed <- substr(x, 4, nchar(x))
 
     return(unprefixed)
+}
+
+mode_interval_dt <- function(x){
+    #mode interval in minutes for datetime vector
+    Mode(diff(as.numeric(x)) / 60)
 }

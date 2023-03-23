@@ -11,9 +11,6 @@ options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
-# set working directory to same location as in 01_neon_q_sim.R
-setwd('~/git/macrosheds/papers/q_sim')
-
 source('src/00_helpers.R')
 
 ## 1. load data ####

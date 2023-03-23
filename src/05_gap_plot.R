@@ -11,9 +11,6 @@ options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
-# set working directory to same location as in 01_neon_q_sim.R
-setwd('~/git/macrosheds/papers/q_sim')
-
 source('src/00_helpers.R')
 
 ## 1. load data ####
@@ -35,11 +32,13 @@ neon_sites <- read_csv('in/neon_site_info.csv') %>%
 
 ## 2. data prep ####
 
+#neon-official continuous Q data
 plotd <- list()
 for(s in neon_sites){
     plotd[[s]] <- read_csv(paste0('in/neon_continuous_Q/', s, '.csv'))
 }
 
+#linear regression predictions
 plotfill <- list()
 for(s in neon_sites){
 
@@ -144,7 +143,7 @@ for(i in seq_along(neon_sites)){
     mtext(s, side = 2, las = 1, line = -1.2)
 }
 
-mtext(expression('Log Discharge (Ls'^-1*')'), side = 2, outer = TRUE, cex = 1.2,
+mtext(expression('Log Discharge'), side = 2, outer = TRUE, cex = 1.2,
       line = -0.5)
 
 dev.off()
@@ -152,3 +151,80 @@ dev.off()
 
 ## 4. gap stats ####
 
+gap_stats <- matrix(
+    NA_real_,
+    nrow = length(neon_sites),
+    ncol = 17,
+    dimnames = list(
+        neon_sites,
+        c('t_tot', 't_gap', 't_fill', 't_nodonor', 't_doublegap',
+          'pct_gap', 'pct_fill', 'pct_nodonor', 'pct_doublegap',
+          'neon_intvl_orig', 'est_intvl_orig', 'cast_intvl',
+          'nday_tot', 'nday_gap', 'nday_fill', 'nday_nodonor', 'nday_doublegap')
+    )
+)
+
+for(i in seq_along(neon_sites)){
+
+    s <- neon_sites[i]
+    print(paste(i, s))
+
+    d <- select(plotd[[s]], -site_code)
+
+    gap_stats[i, 'neon_intvl_orig'] <- mode_interval_dt(d$datetime)
+    synch_intvl <- ifelse(unname(gap_stats[i, 'neon_intvl_orig']) == 60, 60, 15)
+    gap_stats[i, 'cast_intvl'] <- synch_intvl
+    #               m/d  h/d
+    nsamp_per_day <- 60 * 24 / synch_intvl
+
+    d <- d %>%
+        filter(minute(datetime) %% synch_intvl == 0) %>%
+        tidyr::complete(datetime = seq(min(datetime), max(datetime),
+                                       by = paste(synch_intvl, 'min')))
+
+    gap_stats[i, 't_tot'] <- nrow(d)
+    gap_stats[i, 't_gap'] <- sum(is.na(d$discharge))
+    gap_stats[i, 'nday_tot'] <- round(gap_stats[i, 't_tot'] / nsamp_per_day, 2)
+    gap_stats[i, 'nday_gap'] <- round(gap_stats[i, 't_gap'] / nsamp_per_day, 2)
+
+    if(! inherits(plotfill[[s]], 'try-error')){
+        dfill <- plotfill[[s]] %>%
+            mutate(across(any_of('date'), as_datetime)) %>%
+            rename_with(function(x) sub('^date$', 'datetime', x)) %>%
+            select(datetime, Q_predicted)
+
+        gap_stats[i, 'est_intvl_orig'] <- mode_interval_dt(dfill$datetime)
+
+        dfill <- dfill %>%
+            filter(minute(datetime) %% synch_intvl == 0) %>%
+            tidyr::complete(datetime = seq(min(datetime), max(datetime),
+                                           by = paste(synch_intvl, 'min')))
+    } else {
+        gap_stats[i, 't_fill'] <- 0
+        gap_stats[i, 't_nodonor'] <- gap_stats[i, 't_tot']
+        gap_stats[i, 't_doublegap'] <- gap_stats[i, 't_gap']
+        gap_stats[i, 'nday_fill'] <- 0
+        gap_stats[i, 'nday_nodonor'] <- gap_stats[i, 'nday_tot']
+        gap_stats[i, 'nday_doublegap'] <- gap_stats[i, 'nday_gap']
+        next
+    }
+
+    dboth <- left_join(d, dfill, by = 'datetime')
+
+    gap_stats[i, 't_fill'] <- sum(is.na(dboth$discharge) & ! is.na(dboth$Q_predicted))
+    gap_stats[i, 't_nodonor'] <- sum(is.na(dboth$Q_predicted))
+    gap_stats[i, 't_doublegap'] <- sum(is.na(dboth$discharge) & is.na(dboth$Q_predicted))
+    gap_stats[i, 'nday_fill'] <- round(gap_stats[i, 't_fill'] / nsamp_per_day, 2)
+    gap_stats[i, 'nday_nodonor'] <- round(gap_stats[i, 't_nodonor'] / nsamp_per_day, 2)
+    gap_stats[i, 'nday_doublegap'] <- round(gap_stats[i, 't_doublegap'] / nsamp_per_day, 2)
+}
+
+gap_stats[, 'pct_gap'] <- round(gap_stats[, 't_gap'] / gap_stats[, 't_tot'], 2)
+gap_stats[, 'pct_fill'] <- round(gap_stats[, 't_fill'] / gap_stats[, 't_gap'], 2)
+gap_stats[, 'pct_nodonor'] <- round(gap_stats[, 't_nodonor'] / gap_stats[, 't_tot'], 2)
+gap_stats[, 'pct_doublegap'] <- round(gap_stats[, 't_doublegap'] / gap_stats[, 't_tot'], 2)
+
+(gap_sums <- colSums(gap_stats[, c('nday_tot', 'nday_gap', 'nday_fill', 'nday_nodonor', 'nday_doublegap')]))
+unname(gap_sums[3] / gap_sums[2])
+
+write.csv(gap_stats, 'out/gap_stats.csv')

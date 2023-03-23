@@ -17,15 +17,13 @@ options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
-# set working directory to same location as in 01_neon_q_sim.R
-setwd('~/git/macrosheds/papers/q_sim')
 # specify location where NeuralHydrology runs are stored
 nh_dir <- '../../qa_experimentation/imputation/src/nh_methods/runs'
 # specify run IDs for all tested generalist models
 generalist_runids <- 1468:1520
 # specify run IDs for replicates of best model for each specialist type
 # specialist_runids <- c(1548:1627, 1748:1937) #search runs
-specialist_runids <- c(2118:2247, 2293:2397)
+specialist_runids <- c(2293:2422) #2118:2247
 # pgdl_runids <- 2028:2117 #search runs
 pgdl_runids <- 2248:2292
 
@@ -205,6 +203,8 @@ plotd %>%
     tidyr::extract('model', c('model', 'stat'), '(.*?)_([^_]+)$') %>%
     pivot_wider(names_from = c('stat', 'score'), values_from = 'value') %>%
     mutate(across(where(is.numeric), ~round(., 3))) %>%
+    select(-n_nse) %>%
+    rename(n_sites = n_kge) %>%
     write_csv('out/score_table.csv')
 
 ## 7. stats ####

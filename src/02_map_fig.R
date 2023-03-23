@@ -11,9 +11,6 @@ library(sf)
 library(terra)
 library(osmdata)
 
-# set working directory to same location as in 01_neon_q_sim.R
-setwd('~/git/macrosheds/papers/q_sim')
-
 ## 1. load data ####
 
 if(! file.exists('in/neon_site_info.csv')){
