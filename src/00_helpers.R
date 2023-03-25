@@ -1,5 +1,5 @@
 #helper functions for the other R scripts. No need to source these directly.
-#start with 01_neon_q_sim.R
+#start with 01_linear_regression.R
 
 #general
 

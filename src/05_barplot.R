@@ -8,6 +8,7 @@ library(glue)
 library(reticulate)
 library(data.table)
 
+#see step 2 in src/lstm_dungeon/README.txt
 reticulate::use_condaenv('nh2')
 xr <- reticulate::import("xarray")
 pd <- reticulate::import("pandas")
@@ -31,7 +32,7 @@ source('src/00_helpers.R')
 
 ## 1. setup ####
 
-pal <- c('black', rev(viridis::viridis(5, begin = 0.1, end = 1)))
+pal <- c('black', rev(viridis::viridis(5, begin = 0.2, end = 1)))
 
 if(! file.exists('in/neon_site_info.csv')){
     download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
@@ -135,8 +136,6 @@ for(s in plotd$site){
 
 ## 5. figure 2 ####
 
-# plotd <- select(plotd, site, nse_neon, kge_neon, nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl,
-#                 kge_pgdl, nse_lm, kge_lm, nse_lm_scaled, kge_lm_scaled)
 plotd <- select(plotd, site, nse_neon, kge_neon, nse_lm, kge_lm, nse_lm_scaled,
                 kge_lm_scaled, nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl,
                 kge_pgdl)
@@ -168,7 +167,7 @@ dev.off()
 
 plotd_kge <- select(plotd, -contains('nse'))
 plotd_kge$rowmax <- apply(select(plotd_kge, -site), 1, max, na.rm = TRUE)
-plotd_kge <- arrange(plotd_kge, desc(rowmax))
+plotd_kge <- arrange(plotd_kge, desc(kge_neon))
 plotd_m <- as.matrix(select(plotd_kge, -site, -rowmax))
 plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
 plotd_m <- t(plotd_m)
@@ -195,6 +194,7 @@ dev.off()
 plotd %>%
     summarize(across(starts_with(c('nse', 'kge')),
                      list(median = ~median(., na.rm = T),
+                          mean = ~mean(., na.rm = T),
                           min = ~min(., na.rm = T),
                           max = ~max(., na.rm = T),
                           n = ~sum(! is.na(.))),
@@ -217,3 +217,47 @@ n_field_meas <- sapply(
 
 range(n_field_meas)
 mean(n_field_meas)
+
+#best scores across models
+maxd <- plotd %>%
+    rowwise() %>%
+    mutate(max_nse = max(c_across(starts_with('nse') & -nse_neon), na.rm = TRUE),
+           max_kge = max(c_across(starts_with('kge') & -kge_neon), na.rm = TRUE),
+           bestmod_nse = which.max(c_across(starts_with('nse') & -nse_neon)),
+           bestmod_kge = which.max(c_across(starts_with('kge') & -kge_neon))) %>%
+    select(site, ends_with('neon'), starts_with(c('max', 'bestmod')))
+maxd$bestmod_nse <- grep('^nse_', colnames(plotd), value = TRUE)[-1][maxd$bestmod_nse]
+maxd$bestmod_nse <- substr(maxd$bestmod_nse, 5, nchar(maxd$bestmod_nse))
+maxd$bestmod_kge <- grep('^kge_', colnames(plotd), value = TRUE)[-1][maxd$bestmod_kge]
+maxd$bestmod_kge <- substr(maxd$bestmod_kge, 5, nchar(maxd$bestmod_kge))
+
+print(maxd, n = 50)
+
+#distribution of best model scores
+plot(density(maxd$max_nse))
+plot(density(maxd$max_kge))
+
+#median across best model for each site
+group_by(maxd) %>%
+    summarize(median_nse = median(max_nse, na.rm = TRUE),
+              median_kge = median(max_kge, na.rm = TRUE))
+
+#and for neon data
+group_by(maxd) %>%
+    summarize(median_nse = median(nse_neon, na.rm = TRUE),
+              median_kge = median(kge_neon, na.rm = TRUE))
+
+#at how many sites did we achieve better efficiencies?
+filter(maxd, max_kge > kge_neon)
+# filter(maxd, max_nse > nse_neon)
+
+#how many neon sites' published records have KGE < 0.7?
+filter(maxd, kge_neon < 0.7)
+# filter(maxd, nse_neon < 0.7)
+
+#mean KGE of the 7 sites we raised above the 0.7 mark *approx
+maxd %>%
+    filter(kge_neon < 0.7,
+           max_kge > 0.69) %>%  #*
+    pull(max_kge) %>%
+    mean()
