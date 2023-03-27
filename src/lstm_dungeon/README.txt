@@ -16,3 +16,14 @@ anyway, if you want to reproduce the LSTM results reported in the paper, here ar
 1. create a python environment from environment.yml:
    conda env create -f environment.yml
 1. run 
+
+
+
+mention:
+    need about 30GB ram to run lstms as-is
+    need at least 62 to run full nhm
+    also talk about gpu specs
+        put any of this in paper?
+    run_lstms.py was set up orig to do a lot more. sry 
+    unzip lstm_runs.zip
+    unzip input_data.zip

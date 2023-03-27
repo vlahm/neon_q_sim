@@ -8,6 +8,7 @@ library(glue)
 library(reticulate)
 library(data.table)
 
+#python interaction required for loading lstm results.
 #see step 2 in src/lstm_dungeon/README.txt
 reticulate::use_condaenv('nh2')
 xr <- reticulate::import("xarray")
@@ -18,19 +19,17 @@ options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
-# specify location where NeuralHydrology runs are stored
-nh_dir <- '../../qa_experimentation/imputation/src/nh_methods/runs'
-# specify run IDs for all tested generalist models
-generalist_runids <- 1468:1520
-# specify run IDs for replicates of best model for each specialist type
-# specialist_runids <- c(1548:1627, 1748:1937) #search runs
-specialist_runids <- c(2293:2422) #2118:2247
-# pgdl_runids <- 2028:2117 #search runs
-pgdl_runids <- 2248:2292
-
 source('src/00_helpers.R')
 
 ## 1. setup ####
+
+nh_dir <- 'out/lstm_runs'
+
+# specify run IDs for all tested generalist models
+generalist_runids <- 1468:1520
+# specify run IDs for replicates of best model for each specialist type
+specialist_runids <- c(2293:2422)
+pgdl_runids <- 2248:2292
 
 pal <- c('black', rev(viridis::viridis(5, begin = 0.2, end = 1)))
 
@@ -136,6 +135,8 @@ for(s in plotd$site){
 
 ## 5. figure 2 ####
 
+#fig Sx (same as fig 2, but showing NSE)
+
 plotd <- select(plotd, site, nse_neon, kge_neon, nse_lm, kge_lm, nse_lm_scaled,
                 kge_lm_scaled, nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl,
                 kge_pgdl)
@@ -150,20 +151,26 @@ plotd_m <- t(plotd_m)
 rownames(plotd_m) <- c('Published', 'Linreg', 'Linreg scaled', 'LSTM generalist', 'LSTM specialist', 'LSTM process-guided')
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
-    filename = 'figs/fig2_withneon.png')
+    filename = 'figs/fig2_nse.png')
+par(mar = c(5, 2, 2.5, 0), oma = c(0, 0, 0, 0))
 plot(1:230, rep(0.5, 230), ylim = c(0, 1), ann = FALSE, axes = FALSE, col = 'transparent')
 gray_bar_seq <- seq(0.2, 238, 17)
 for(i in 1:14){
     ix <- gray_bar_seq[i] + i / 11
-    polygon(c(ix, ix + 8.3, ix + 8.3, ix), c(-0.1, -0.1, 1.04, 1.04), col = 'gray85', border = FALSE, xpd = NA)
+    polygon(c(ix, ix + 8.3, ix + 8.3, ix), c(-0.36, -0.36, 1.04, 1.04), col = 'gray85', border = FALSE, xpd = NA)
 }
 par(new = TRUE)
 barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_nse$site,
-        col = pal, las = 2, ylab = 'Nash-Sutcliffe Efficiency',
-        legend.text = TRUE, border = 'transparent',
+        col = pal, las = 2, ylab = '',
+        legend.text = TRUE, border = 'transparent', yaxt = 'n',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
                            xpd = NA, ncol = 3))
+mtext('NEON stream/river Site', 1, 3.8, font = 2)
+mtext('Nash-Sutcliffe Efficiency', 2, 1, font = 2)
+axis(2, seq(0, 1, 0.1), line = -0.9, tcl = -0.3, padj = 1)
 dev.off()
+
+#actual fig 2
 
 plotd_kge <- select(plotd, -contains('nse'))
 plotd_kge$rowmax <- apply(select(plotd_kge, -site), 1, max, na.rm = TRUE)
@@ -174,7 +181,8 @@ plotd_m <- t(plotd_m)
 rownames(plotd_m) <- c('Published', 'Linreg', 'Linreg scaled', 'LSTM generalist', 'LSTM specialist', 'LSTM process-guided')
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
-    filename = 'figs/fig2_kge_withneon.png')
+    filename = 'figs/fig2_kge.png')
+par(mar = c(5, 2, 2.5, 0), oma = c(0, 0, 0, 0))
 plot(1:230, rep(0.5, 230), ylim = c(0, 1), ann = FALSE, axes = FALSE, col = 'transparent')
 gray_bar_seq <- seq(0.2, 238, 17)
 for(i in 1:14){
@@ -183,10 +191,13 @@ for(i in 1:14){
 }
 par(new = TRUE)
 barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_kge$site,
-        col = pal, las = 2, ylab = 'Kling-Gupta Efficiency',
-        legend.text = TRUE, border = 'transparent',
+        col = pal, las = 2, ylab = '',
+        legend.text = TRUE, border = 'transparent', yaxt = 'n',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
                            xpd = NA, ncol = 3))
+mtext('NEON stream/river Site', 1, 3.8, font = 2)
+mtext('Kling-Gupta Efficiency', 2, 1, font = 2)
+axis(2, seq(0, 1, 0.1), line = -0.9, tcl = -0.3, padj = 1)
 dev.off()
 
 ## 6. table 4 ####

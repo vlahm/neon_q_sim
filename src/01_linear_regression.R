@@ -18,10 +18,6 @@ library(DAAG)
 library(tidyverse)
 library(macrosheds)
 
-#TODO: switch on addition of USGS Q record for TECR if we want to predict that site better in the past (~1980)
-#download.file(neon sites) for watershed areas
-#what about sites tkin and tkot?
-
 # NOTE: working directory is set by opening q_sim.Rproj. Alternatively, you may set it here.
 # setwd('path/to/q_sim')
 

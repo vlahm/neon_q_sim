@@ -1252,7 +1252,7 @@ plots_and_results_daily <- function(neon_site, best, lm_df, results){
         filter(! is.na(discharge)) %>%
         rename(discharge_daily = discharge)
 
-    q_eval = read_csv('/in/neon_q_eval.csv') %>%
+    q_eval = read_csv('in/neon_q_eval.csv') %>%
         filter(site == neon_site)
 
     check1 = is.na(q_eval$regression_status) | q_eval$regression_status %in% c('good')
@@ -1506,6 +1506,7 @@ retrieve_test_results <- function(runids){
 
         td <- try(locate_test_results(nh_dir, runids[i]), silent = TRUE)
         if(inherits(td, 'try-error') || is.null(td)) next
+        # write_lines(td, '/tmp/rundirs.txt', append = T)
 
         xx = reticulate::py_load_object(td)
 

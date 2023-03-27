@@ -3,6 +3,7 @@
 # last edit: 2023-03-24
 
 library(readr)
+library(stringr)
 library(reticulate)
 
 #see step 2 in src/lstm_dungeon/README.txt for installing conda environment
@@ -17,7 +18,17 @@ datadir <- file.path(getwd(), 'in/lstm_data')
 rundir <- file.path(getwd(), 'out/lstm_runs')
 
 #replace i/o directories across model/config text files
+cfgs <- list.files('.', pattern = '.*\\.yml$', recursive = TRUE, full.names = TRUE)
+cfgs <- c(cfgs, list.files('.', pattern = 'pretrained_model_loc',
+                           recursive = TRUE, full.names = TRUE))
+for(cfg_ in cfgs){
 
+    read_file(cfg_) %>%
+        str_replace_all('PLACEHOLDER3', datadir) %>%
+        str_replace_all('PLACEHOLDER2', rundir) %>%
+        str_replace_all('PLACEHOLDER', confdir) %>%
+        write_file(cfg_)
+}
 
 #crude way to pass variables into python script from R
 r2pyenv_template <- new.env()
@@ -57,4 +68,6 @@ py_run_file('src/lstm_dungeon/run_lstms.py')
 
 r2pyenv_template$strategy <- 'specialist'
 r2pyenv_template$runset <- 'runs_2248-2292'
+r2pyenv <- as.list(r2pyenv_template)
+
 py_run_file('src/lstm_dungeon/run_lstms.py')
