@@ -13,7 +13,11 @@ np <- import("numpy")
 
 #establish i/o directory locations
 confdir <- file.path(getwd(), 'in/lstm_configs')
+datadir <- file.path(getwd(), 'in/lstm_data')
 rundir <- file.path(getwd(), 'out/lstm_runs')
+
+#replace i/o directories across model/config text files
+
 
 #crude way to pass variables into python script from R
 r2pyenv_template <- new.env()
