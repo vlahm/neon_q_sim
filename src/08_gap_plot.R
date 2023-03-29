@@ -50,6 +50,12 @@ for(s in neon_sites){
                          silent = TRUE)
 }
 
+#lstm predictions
+HERE
+gen_res <- retrieve_test_results(generalist_runids)
+plotfill$TECR
+plotfill$BIGC
+
 ## 3. plot ####
 
 neon_sites <- sort(neon_sites)

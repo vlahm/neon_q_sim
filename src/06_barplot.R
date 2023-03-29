@@ -27,6 +27,8 @@ nh_dir <- 'out/lstm_runs'
 
 # specify run IDs for all tested generalist models
 generalist_runids <- 1468:1520
+tecr_runids <- 1718:1747
+bigc_runids <-
 # specify run IDs for replicates of best model for each specialist type
 specialist_runids <- c(2293:2422)
 pgdl_runids <- 2248:2292
@@ -83,6 +85,8 @@ for(s in plotd$site){
 gen_res <- retrieve_test_results(generalist_runids)
 spec_res <- retrieve_test_results(specialist_runids)
 pgdl_res <- retrieve_test_results(pgdl_runids)
+
+tecr_res <- retrieve_test_results(tecr_runids)
 
 # c('site', 'nse_lm', 'nse_lm_scaled', 'nse_gen', 'nse_spec', 'nse_pgdl',
 #   'kge_lm', 'kge_lm_scaled', 'kge_gen', 'kge_spec', 'kge_pgdl')

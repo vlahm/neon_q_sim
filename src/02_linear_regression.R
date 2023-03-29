@@ -18,98 +18,13 @@ library(DAAG)
 library(tidyverse)
 library(macrosheds)
 
-# NOTE: working directory is set by opening q_sim.Rproj. Alternatively, you may set it here.
-# setwd('path/to/q_sim')
-
 options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
 source('src/00_helpers.R')
 
-## 1. retrieve input data ####
-
-# NEON site metadata as reproduced by Rhea et al. 2023
-# (primary source here: https://www.neonscience.org/field-sites/explore-field-sites)
-
-#last retrieval: #2023-01-31
-if(! file.exists('in/neon_site_info.csv')){
-    download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
-                  destfile = 'in/neon_site_info.csv')
-}
-
-#last retrieval: #2023-01-31
-if(! file.exists('in/neon_site_info2.csv')){
-    #filename changes with every update, so might have to modify URL below
-    download.file('https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20220412.csv',
-                  destfile = 'in/neon_site_info2.csv')
-}
-
-#last retrieval: #2023-01-31
-neon_areas <- read_csv('in/neon_site_info.csv') %>%
-    filter(! SiteType == 'Lake') %>%
-    mutate(ws_area_ha = WSAreaKm2 * 100) %>%
-    select(site_code = SiteID, ws_area_ha)
-
-neon_sites <- neon_areas$site_code
-
-# NEON discharge data (field measurements and continuous)
-
-#last retrieval: #2023-03-09
-if(! length(list.files('in/neon_continuous_Q/'))){
-    get_neon_inst_discharge(neon_sites)
-}
-
-#last retrieval: #2023-01-31
-if(! length(list.files('in/neon_field_Q/'))){
-    get_neon_field_discharge(neon_sites)
-}
-
-# NEON discharge evaluation results from Rhea et al. 2023
-
-#last retrieval: #2023-01-31
-if(! file.exists('in/neon_q_eval.csv')){
-    download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_q_eval.csv',
-                  destfile = 'in/neon_q_eval.csv')
-}
-
-#last retrieval: #2023-01-31
-q_eval <- read_csv('in/neon_q_eval.csv') %>%
-    filter(site %in% neon_sites)
-
-# MacroSheds Q data from Niwot domain: used for donor gauges in lieu of USGS data
-
-#last retrieval: #2023-01-31
-if(! dir.exists('in/niwot')){
-    macrosheds::ms_download_core_data(macrosheds_root = './in',
-                                      domains = 'niwot')
-}
-
-ms_q <- macrosheds::ms_load_product(macrosheds_root = './in',
-                                    prodname = 'discharge',
-                                    domains = 'niwot') %>%
-    filter(ms_status == 0)
-
-# H. J. Andrews Experimental Forest Q data: used for donor gauges in lieu of USGS data
-
-#last retrieval: #2022-04-14
-if(! file.exists('in/hjandrews_q.txt')){
-    download.file('https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-and.4341.33&entityid=86490799297ff361b0741b807804c43a',
-                  destfile = 'in/hjandrews_q.txt')
-}
-
-# relevant MacroSheds site metadata
-
-ms_areas <- macrosheds::ms_load_sites() %>%
-    filter(site_type == 'stream_gauge',
-           ! is.na(ws_area_ha)) %>%
-    select(site_code, ws_area_ha)
-
-# donor gauge IDs
-
-donor_gauges <- yaml::read_yaml('in/donor_gauges.yml')
-
-## 2. run setup ####
+## 1. run setup ####
 
 build_dir_structure()
 
@@ -122,7 +37,7 @@ results_lm <- results_lm_noscale <- tibble(
     pbias = NA, pbias_cv = NA, bestmod = NA, adj_r_squared = NA
 )
 
-## 3. linear regression (lm) on specific discharge ####
+## 2. linear regression (lm) on specific discharge ####
 
 # REDB ####
 neon_site = 'REDB'; gagenums = donor_gauges[[neon_site]]
@@ -610,7 +525,7 @@ results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 # best = eval_model_set(data = lm_df, model_list = mods)
 # results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
 
-## 4. linear regression (lm) on un-scaled discharge ####
+## 3. linear regression (lm) on un-scaled discharge ####
 
 rename_dir_structure()
 build_dir_structure()
@@ -982,7 +897,7 @@ results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscal
 # best = eval_model_set(data = lm_df, model_list = mods, unscale_q_by_area = FALSE)
 # results_lm_noscale = plots_and_results(neon_site, best, lm_df, results_lm_noscale, unscale_q_by_area = FALSE)
 
-## 5. random forest regression (abandoned; poor predictions, esp. out of Q sample range) ####
+## 4. random forest regression (abandoned; poor predictions, esp. out of Q sample range) ####
 
 # library(caret)
 # library(ranger)
