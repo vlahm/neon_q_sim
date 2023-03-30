@@ -27,3 +27,4 @@ mention:
     run_lstms.py was set up orig to do a lot more. sry 
     unzip lstm_runs.zip
     unzip input_data.zip
+    need full camels dataset AND daymet isolate

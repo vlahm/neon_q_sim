@@ -1362,7 +1362,7 @@ plots_and_results_daily <- function(neon_site, best, lm_df, results){
     return(results)
 }
 
-# misc helpers required to generate figures
+# misc helpers required to generate figures/datasets
 
 dms_to_decdeg = function(x){
 
@@ -1878,4 +1878,51 @@ drop_var_prefix <- function(x){
 mode_interval_dt <- function(x){
     #mode interval in minutes for datetime vector
     Mode(diff(as.numeric(x)) / 60)
+}
+
+ms_write_netcdf <- function(df_list, path){
+
+    vars_units0 <- c(discharge = 'cms', dayl = 's', prcp = 'mm/day',
+                     srad = 'W/m2', swe = 'mm', tmax = 'C', tmin = 'C', vp = 'Pa',
+                     pet = 'mm')
+
+    for(i in seq_along(df_list)){
+
+        d_chunk <- df_list[[i]]
+
+        if(! 'pet' %in% colnames(d_chunk)){
+            vars_units <- vars_units0[names(vars_units0) != 'pet']
+        } else {
+            vars_units <- vars_units0
+        }
+
+        ncdf_loc <- glue('{pth}/{s}.nc',
+                         pth = path,
+                         s = d_chunk$site_code[1])
+
+        dim_time <- ncdim_def('date',
+                              units = 'days since 1970-01-01 00:00',
+                              calendar = 'standard',
+                              vals = d_chunk$date)
+
+        ncdf_varlist <- list()
+        for(j in seq_along(vars_units)){
+
+            ncdf_varlist[[j]] <- ncvar_def(name = names(vars_units)[j],
+                                           units = unname(vars_units)[j],
+                                           dim = list(dim_time),
+                                           missval = NULL)
+        }
+
+        con <- nc_create(filename = ncdf_loc,
+                         vars = ncdf_varlist)
+
+        for(j in seq_along(vars_units)){
+
+            varname <- ncdf_varlist[[j]]$name
+            ncvar_put(con, varname, d_chunk[[varname]])
+        }
+
+        nc_close(con)
+    }
 }

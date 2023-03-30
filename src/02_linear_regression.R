@@ -24,6 +24,10 @@ options(readr.show_progress = FALSE,
 
 source('src/00_helpers.R')
 
+#source the following script (or step through it) if you're not using our pre-bundled data at
+# []
+# source('src/01_data_retrieval.R')
+
 ## 1. run setup ####
 
 build_dir_structure()

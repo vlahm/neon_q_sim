@@ -20,6 +20,13 @@ options(readr.show_progress = FALSE,
         timeout = 3000)
 
 source('src/00_helpers.R')
+# source('src/01_data_retrieval.R') #source this if you haven't run it already
+# source('src/02_linear_regression.R') #source this if you haven't run it already
+
+#source the following scripts (or step through them) if you're not using our pre-bundled data at
+# []
+# source('src/03_organize_camels_macrosheds_nhm.R')
+# source('src/04_run_lstms.R')
 
 ## 1. setup ####
 
@@ -35,22 +42,9 @@ pgdl_runids <- 2248:2292
 
 pal <- c('black', rev(viridis::viridis(5, begin = 0.2, end = 1)))
 
-if(! file.exists('in/neon_site_info.csv')){
-    download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
-                  destfile = 'in/neon_site_info.csv')
-}
-
 neon_sites <- read_csv('in/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     pull(SiteID)
-
-if(! length(list.files('in/neon_continuous_Q/'))){
-    get_neon_inst_discharge(neon_sites)
-}
-
-if(! length(list.files('in/neon_field_Q/'))){
-    get_neon_field_discharge(neon_sites)
-}
 
 #initialize results data.frame
 plotd <- matrix(

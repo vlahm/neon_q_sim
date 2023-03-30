@@ -12,6 +12,13 @@ options(readr.show_progress = FALSE,
         timeout = 3000)
 
 source('src/00_helpers.R')
+# source('src/01_data_retrieval.R') #source this if you haven't run it already
+# source('src/02_linear_regression.R') #source this if you haven't run it already
+
+#source the following scripts (or step through them) if you're not using our pre-bundled data at
+# []
+# source('src/03_organize_camels_macrosheds_nhm.R')
+# source('src/04_run_lstms.R')
 
 ## 1. load data ####
 

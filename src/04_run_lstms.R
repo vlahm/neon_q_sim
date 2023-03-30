@@ -12,6 +12,16 @@ xr <- import("xarray")
 pd <- import("pandas")
 np <- import("numpy")
 
+source('src/00_helpers.R')
+
+#source the following script (or step through it) if you're not using our pre-bundled data at
+# []
+# source('src/01_data_retrieval.R')
+
+#source the following script (or step through it) if you're not using our pre-bundled data at
+# []
+# source('src/03_organize_camels_macrosheds_nhm.R')
+
 #establish i/o directory locations
 confdir <- file.path(getwd(), 'in/lstm_configs')
 datadir <- file.path(getwd(), 'in/lstm_data')
