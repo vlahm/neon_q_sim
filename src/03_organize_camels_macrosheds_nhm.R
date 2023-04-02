@@ -48,7 +48,9 @@ if(! dir.exists('in/macrosheds/arctic')){
                           domains = 'all', version = '1.0')
 
     ms_download_ws_attr(macrosheds_root = './in/macrosheds',
-                        dataset = 'all', version = '1.0')
+                        dataset = 'CAMELS summaries', version = '1.0')
+    ms_download_ws_attr(macrosheds_root = './in/macrosheds',
+                        dataset = 'CAMELS Daymet forcings', version = '1.0')
 }
 
 ms_q <- ms_load_product(macrosheds_root = './in/macrosheds',
@@ -560,7 +562,7 @@ if(file.exists(camels_gauge_info_with_segids)){
 } else {
 
     camels_gauge_info <- read_tsv(
-        '/home/mike/git/macrosheds/qa_experimentation/data/CAMELS/basin_dataset_public_v1p2/basin_metadata/gauge_information.txt',
+        'in/CAMELS/basin_dataset_public_v1p2/basin_metadata/gauge_information.txt',
         col_names = c('HUC_02', 'GAGE_ID', 'GAGE_NAME', 'LAT', 'LONG', 'DRAINAGE_AREA'),
         skip = 1
     )

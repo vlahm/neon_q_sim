@@ -66,12 +66,12 @@ get_neon_field_discharge <- function(neon_sites){
         print(s)
 
         #field discharge measurements
-        ff <- paste0('field_q_rds_files/', s, '.rds')
+        # ff <- paste0('field_q_rds_files/', s, '.rds')
         if(file.exists(ff)){
             qd <- readRDS(ff)
         } else {
             qd <- neonUtilities::loadByProduct('DP1.20048.001', site = s, check.size = FALSE)
-            saveRDS(qd, paste0('field_q_rds_files/', s, '.rds'))
+            # saveRDS(qd, paste0('field_q_rds_files/', s, '.rds'))
         }
 
         q1 <- q2 <- tibble()
