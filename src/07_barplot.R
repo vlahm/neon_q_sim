@@ -19,14 +19,12 @@ options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
-source('src/00_helpers.R')
-# source('src/01_data_retrieval.R') #source this if you haven't run it already
-# source('src/02_linear_regression.R') #source this if you haven't run it already
-
-#source the following scripts (or step through them) if you're not using our pre-bundled data at
-# []
-# source('src/03_organize_camels_macrosheds_nhm.R')
-# source('src/04_run_lstms.R')
+#pre-bundled in/out data available at: [**]
+if(! exists('ts_plot')) source('src/00_helpers.R')
+if(! exists('ms_areas')) source('src/01_data_retrieval.R')
+if(! dir.exists('out/lm_out')) source('src/02_linear_regression.R', local = new.env())
+if(! dir.exists('in/lstm_data')) source('src/03_organize_camels_macrosheds_nhm.R', local = new.env())
+if(! dir.exists('out/lstm_runs')) source('src/04_run_lstms.R', local = new.env())
 
 ## 1. setup ####
 

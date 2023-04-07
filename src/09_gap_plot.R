@@ -11,33 +11,19 @@ options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
-source('src/00_helpers.R')
-# source('src/01_data_retrieval.R') #source this if you haven't run it already
-# source('src/02_linear_regression.R') #source this if you haven't run it already
+#pre-bundled in/out data available at: [**]
+if(! exists('ts_plot')) source('src/00_helpers.R')
+if(! exists('ms_areas')) source('src/01_data_retrieval.R')
+if(! dir.exists('out/lm_out')) source('src/02_linear_regression.R', local = new.env())
+if(! dir.exists('in/lstm_data')) source('src/03_organize_camels_macrosheds_nhm.R', local = new.env())
+if(! dir.exists('out/lstm_runs')) source('src/04_run_lstms.R', local = new.env())
 
-#source the following scripts (or step through them) if you're not using our pre-bundled data at
-# []
-# source('src/03_organize_camels_macrosheds_nhm.R')
-# source('src/04_run_lstms.R')
 
-## 1. load data ####
-
-# NEON discharge data (field measurements and continuous)
-
-if(! length(list.files('in/neon_continuous_Q/'))){
-    get_neon_inst_discharge(neon_sites)
-}
-
-if(! file.exists('in/neon_site_info.csv')){
-    download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
-                  destfile = 'in/neon_site_info.csv')
-}
+## 1. data prep ####
 
 neon_sites <- read_csv('in/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     pull(SiteID)
-
-## 2. data prep ####
 
 #neon-official continuous Q data
 plotd <- list()
@@ -63,7 +49,7 @@ gen_res <- retrieve_test_results(generalist_runids)
 plotfill$TECR
 plotfill$BIGC
 
-## 3. plot ####
+## 2. plot ####
 
 neon_sites <- sort(neon_sites)
 
@@ -162,7 +148,7 @@ mtext(expression('Log Discharge'), side = 2, outer = TRUE, cex = 1.2,
 dev.off()
 
 
-## 4. gap stats ####
+## 3. gap stats ####
 
 gap_stats <- matrix(
     NA_real_,

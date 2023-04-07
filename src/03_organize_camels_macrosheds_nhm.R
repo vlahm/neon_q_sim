@@ -18,12 +18,9 @@ options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
-source('src/00_helpers.R')
-source('src/01_data_retrieval.R')
-
-#source the following script (or step through it) if you're not using our pre-bundled data at
-# []
-# source('src/01_data_retrieval.R')
+#pre-bundled in/out data available at: [**]
+if(! exists('ts_plot')) source('src/00_helpers.R')
+if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 
 dir.create('in/lstm_data/attributes', recursive = TRUE, showWarnings = FALSE)
 dir.create('in/lstm_data/time_series/', recursive = TRUE, showWarnings = FALSE)

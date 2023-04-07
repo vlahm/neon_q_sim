@@ -11,12 +11,11 @@ library(sf)
 library(terra)
 library(osmdata)
 
-## 1. load data ####
+#pre-bundled in/out data available at: [**]
+if(! exists('ts_plot')) source('src/00_helpers.R')
+if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 
-if(! file.exists('in/neon_site_info.csv')){
-    download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
-                  destfile = 'in/neon_site_info.csv')
-}
+## 1. load data ####
 
 neon_sites <- read_csv('in/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
@@ -29,8 +28,6 @@ ms_sites <- macrosheds::ms_load_sites() %>%
     filter(site_type == 'stream_gauge',
            site_code %in% ms_site_codes_in_use) %>%
     st_as_sf(coords = c('longitude', 'latitude'), crs = 4326)
-
-donor_gauges <- yaml::read_yaml('in/donor_gauges.yml')
 
 usgs_sites <- lapply(donor_gauges, function(x) Filter(function(y) ! grepl('[A-Z]', y), x))
 usgs_sites <- usgs_sites[sapply(usgs_sites, length) > 0]

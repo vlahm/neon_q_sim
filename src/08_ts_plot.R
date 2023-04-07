@@ -11,39 +11,14 @@ options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
-source('src/00_helpers.R')
-# source('src/01_data_retrieval.R') #source this if you haven't run it already
-# source('src/02_linear_regression.R') #source this if you haven't run it already
+#pre-bundled in/out data available at: [**]
+if(! exists('ts_plot')) source('src/00_helpers.R')
+if(! exists('ms_areas')) source('src/01_data_retrieval.R')
+if(! dir.exists('out/lm_out')) source('src/02_linear_regression.R', local = new.env())
+if(! dir.exists('in/lstm_data')) source('src/03_organize_camels_macrosheds_nhm.R', local = new.env())
+if(! dir.exists('out/lstm_runs')) source('src/04_run_lstms.R', local = new.env())
 
-#source the following scripts (or step through them) if you're not using our pre-bundled data at
-# []
-# source('src/03_organize_camels_macrosheds_nhm.R')
-# source('src/04_run_lstms.R')
-
-## 1. load data ####
-
-# NEON discharge data (field measurements and continuous)
-
-if(! length(list.files('in/neon_continuous_Q/'))){
-    get_neon_inst_discharge(neon_sites)
-}
-
-if(! length(list.files('in/neon_field_Q/'))){
-    get_neon_field_discharge(neon_sites)
-}
-
-if(! file.exists('in/neon_site_info.csv')){
-    download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
-                  destfile = 'in/neon_site_info.csv')
-}
-
-if(! file.exists('in/neon_site_info2.csv')){
-    #filename changes with every update, so might have to modify URL below
-    download.file('https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20220412.csv',
-                  destfile = 'in/neon_site_info2.csv')
-}
-
-# 2. plot ####
+# 1. plot ####
 
 png(width = 8, height = 5, units = 'in', type = 'cairo', res = 300,
     filename = 'figs/fig3.png')
@@ -60,7 +35,7 @@ ts_plot('WALK', 2017) #0.886
 mtext(expression('Discharge (Ls'^-1*')'), side = 2, outer = TRUE)
 dev.off()
 
-# 3. site table ####
+# 2. site table ####
 
 sitelist <- read_csv('in/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%

@@ -134,29 +134,75 @@ get_neon_inst_discharge <- function(neon_sites){
 
     for(i in seq_along(neon_sites)){
 
-        s = neon_sites[i]
+        s <- neon_sites[i]
         print(s)
 
         #continuous discharge measurements
-        qd = neonUtilities::loadByProduct('DP4.00130.001', site = s, check.size = FALSE,
-                                          release = 'RELEASE-2023')
+        if(file.exists(paste0('debris/neon_q_dl/', s, '.rds'))) next #
 
-        q1 = q2 = tibble()
-        try({
-            q1 = select(qd$csd_continuousDischarge, discharge = maxpostDischarge, datetime = endDate)
-        }, silent = TRUE)
-        try({
-            q2 = select(qd$csd_continuousDischargeUSGS, discharge = usgsDischarge, datetime = endDate)
-        }, silent = TRUE)
-        if(nrow(q1) && nrow(q2)){
-            q = bind_rows(q1, q2)
-        } else if(nrow(q1)){
-            q = q1
-        } else {
-            q = q2
+        qd <- neonUtilities::loadByProduct('DP4.00130.001', site = s,
+                                           check.size = FALSE,
+                                           release = 'RELEASE-2023')
+
+        write_lines(paste0(s, '\n'), 'log/neonq_qc.txt', append = T) #
+        saveRDS(qd, paste0('debris/neon_q_dl', s, '.rds')) #
+
+        q1 <- q2 <- tibble()
+
+        if('csd_continuousDischarge' %in% names(qd)){
+
+            q1 <- qd$csd_continuousDischarge
+
+            xx = table(q1$dischargeFinalQF, useNA = 'always')
+            write_lines('FinalQF', 'log/neonq_qc.txt', append = T)
+            write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
+            write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
+            xx = table(q1$dischargeFinalQFSciRvw, useNA = 'always')
+            write_lines('FinalQFSciRvm', 'log/neonq_qc.txt', append = T)
+            write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
+            write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
+            write_lines('', 'log/neonq_qc.txt', append = T)
+
+            q1 <- q1 %>%
+                filter(is.na(dischargeFinalQF) | dischargeFinalQF == 0,
+                       is.na(dischargeFinalQFSciRvw) | dischargeFinalQFSciRvw == 0) %>%
+                select(discharge = maxpostDischarge,
+                       datetime = endDate, discharge_lower = withRemnUncQLower2Std,
+                       discharge_upper = withRemnUncQUpper2Std)
         }
 
-        q = as_tibble(q) %>%
+        if('csd_continuousDischargeUSGS' %in% names(qd)){
+
+            q2 <- qd$csd_continuousDischargeUSGS
+
+            xx = table(q2$dischargeFinalQF, useNA = 'always')
+            write_lines('FinalQF', 'log/neonq_qc.txt', append = T)
+            write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
+            write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
+            xx = table(q2$dischargeFinalQFSciRvw, useNA = 'always')
+            write_lines('FinalQFSciRvm', 'log/neonq_qc.txt', append = T)
+            write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
+            write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
+            write_lines('', 'log/neonq_qc.txt', append = T)
+
+            q2 <- q2 %>%
+                filter(is.na(dischargeFinalQFSciRvw) | dischargeFinalQFSciRvw == 0) %>%
+                select(discharge = usgsDischarge,
+                       datetime = endDate, discharge_lower = withRegressionUncQLower2Std,
+                       discharge_upper = withRegressionUncQUpper2Std)
+        }
+
+        if(nrow(q1) && nrow(q2)){
+            q <- bind_rows(q1, q2)
+        } else if(nrow(q1)){
+            q <- q1
+        } else {
+            q <- q2
+        }
+
+        write_lines('---------------\n\n', 'log/neonq_qc.txt', append = T)
+
+        q <- as_tibble(q) %>%
             mutate(site_code = s)
 
         write_csv(q, glue('in/neon_continuous_Q/{s}.csv'))

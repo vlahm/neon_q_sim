@@ -6,3 +6,4 @@ debris/
 .Rproj.user
 src/lstm_dungeon/dungeon_lvl_2
 .Rhistory
+log/

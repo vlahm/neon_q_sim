@@ -1,0 +1,92 @@
+# Mike Vlah
+# vlahm13@gmail.com
+# last edit: 2023-04-05
+
+library(tidyverse)
+library(reticulate)
+library(glue)
+library(lubridate)
+
+#see step 2 in src/lstm_dungeon/README.txt for installing conda environment
+use_condaenv('nh2')
+xr <- import("xarray")
+pd <- import("pandas")
+np <- import("numpy")
+
+#pre-bundled in/out data available at: [**]
+if(! exists('ts_plot')) source('src/00_helpers.R')
+if(! exists('ms_areas')) source('src/01_data_retrieval.R')
+if(! dir.exists('out/lm_out')) source('src/02_linear_regression.R', local = new.env())
+if(! dir.exists('in/lstm_data')) source('src/03_organize_camels_macrosheds_nhm.R', local = new.env())
+if(! dir.exists('out/lstm_runs')) source('src/04_run_lstms.R', local = new.env())
+
+ranks <- read_csv('cfg/model_ranks.csv')
+
+# 1. helpers ####
+
+load_q_neon <- function(site){
+
+    q <- read_csv(glue('in/neon_continuous_Q/{site}.csv')) %>%
+        mutate(source = 'NEON') %>%
+        select(datetime, discharge_Ls = discharge, discharge_lower95_Ls = discharge_lower,
+               discharge_upper95_Ls = discharge_upper, source)
+
+    return(q)
+}
+
+load_q_lm <- function(site){
+
+    lm_res <- read_csv('out/lm_out/results.csv') %>%
+        filter(site_code == site) %>%
+        pull(kge)
+
+    lm_sq_res <- read_csv('out/lm_out_specQ/results_specificq.csv') %>%
+        filter(site_code == site) %>%
+        pull(kge)
+
+    if(is.na(lm_res)) stop('no lm result for this site')
+
+    q <- read_csv(glue('out/{lm}/predictions/{site}.csv',
+                       lm = ifelse(lm_res > lm_sq_res, 'lm_out', 'lm_out_specQ'))) %>%
+        mutate(source = ifelse(!!lm_res > !!lm_sq_res, 'Linreg', 'Linreg_scaled'))
+
+    if('date' %in% colnames(q)){
+        q$datetime <- as_datetime(paste(q$date, '12:00:00'))
+    }
+
+    q <- select(q, datetime, discharge_Ls = Q_predicted,
+                discharge_lower95_Ls = Q_pred_int_2.5,
+                discharge_upper95_Ls = Q_pred_int_97.5, source)
+
+    return(q)
+}
+
+# 2. ####
+
+for(i in seq_len(nrow(ranks))){
+
+    s <- ranks$site[i]
+    rankvec <- unlist(ranks[i, 2:4])
+
+    composite <- tibble()
+    for(r in rankvec){
+
+        if(r == 'N'){
+            composite <- bind_rows(composite, load_q_neon(site = s))
+        } else if(r == 'L'){
+HERE. THIS FUNC IS GOOD, BUT CONSIDER HOW TO HANDLE INTERVALS:
+                    POSSIBILITIES: MULTIPLE INTS PER SERIES, CONFORM TO MIN INT
+                    SECOND-AXIS POSSIBILITIES: SEADEC INTERP SMALL GAPS, AND LARGE GAPS? ADD ANOTHER STATUS COLUMN
+        } else if(r == 'G'){
+
+        } else if(r == 'S'){
+
+        } else if(r == 'P'){
+
+        } else {
+            stop('model type ', r, ' not recognized')
+        }
+    }
+
+    write_csv()
+}
