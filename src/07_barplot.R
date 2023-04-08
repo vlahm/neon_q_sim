@@ -161,7 +161,7 @@ barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_nse$site,
         legend.text = TRUE, border = 'transparent', yaxt = 'n',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
                            xpd = NA, ncol = 3))
-mtext('NEON stream/river Site', 1, 3.8, font = 2)
+mtext('NEON stream/river site', 1, 3.8, font = 2)
 mtext('Nash-Sutcliffe Efficiency', 2, 1, font = 2)
 axis(2, seq(0, 1, 0.1), line = -0.9, tcl = -0.3, padj = 1)
 dev.off()

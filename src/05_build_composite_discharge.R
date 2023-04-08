@@ -61,6 +61,32 @@ load_q_lm <- function(site){
     return(q)
 }
 
+load_q_generalist <- function(site){
+
+    fs <- list.files('out/lstm_runs', full.names = TRUE, recursive = TRUE)
+
+    testsite_by_file <- grep('test_metrics\\.csv$', fs, value = TRUE) %>%
+        sort() %>%
+        read_lines(skip = 1) %>%
+        {sub('(_MANUALQ|,).*', '', .)}
+
+    ensemble_runs_ <- rle2(testsite_by_file) %>%
+        filter(values == !!site,
+               lengths == 30)
+
+    if(nrow(ensemble_runs_)) stop('more than one ensemble detected for this site')
+
+    ensemble_runs <- fs[ensemble_runs_$starts:ensemble_runs_$stops]
+
+
+
+    q <- select(q, datetime, discharge_Ls = Q_predicted,
+                discharge_lower95_Ls = Q_pred_int_2.5,
+                discharge_upper95_Ls = Q_pred_int_97.5, source)
+
+    return(q)
+}
+
 # 2. ####
 
 for(i in seq_len(nrow(ranks))){
@@ -74,11 +100,9 @@ for(i in seq_len(nrow(ranks))){
         if(r == 'N'){
             composite <- bind_rows(composite, load_q_neon(site = s))
         } else if(r == 'L'){
-HERE. THIS FUNC IS GOOD, BUT CONSIDER HOW TO HANDLE INTERVALS:
-                    POSSIBILITIES: MULTIPLE INTS PER SERIES, CONFORM TO MIN INT
-                    SECOND-AXIS POSSIBILITIES: SEADEC INTERP SMALL GAPS, AND LARGE GAPS? ADD ANOTHER STATUS COLUMN
+            composite <- bind_rows(composite, load_q_lm(site = s))
         } else if(r == 'G'){
-
+            HERE: was working on load_q_generalist, but actually need to adapt collect_best_q_predictions.R
         } else if(r == 'S'){
 
         } else if(r == 'P'){
@@ -88,5 +112,8 @@ HERE. THIS FUNC IS GOOD, BUT CONSIDER HOW TO HANDLE INTERVALS:
         }
     }
 
-    write_csv()
+    composite %>%
+        complete() %>%
+        na_seadec(up to 15 m) %>%
+        write_csv()
 }

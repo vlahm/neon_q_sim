@@ -22,7 +22,7 @@ confdir <- file.path(getwd(), 'in/lstm_configs')
 datadir <- file.path(getwd(), 'in/lstm_data')
 rundir <- file.path(getwd(), 'out/lstm_runs')
 
-#replace i/o directories across model/config text files
+#insert i/o directories into model/config text files
 cfgs <- list.files('.', pattern = '.*\\.yml$', recursive = TRUE, full.names = TRUE)
 cfgs <- c(cfgs, list.files('.', pattern = 'pretrained_model_loc',
                            recursive = TRUE, full.names = TRUE))
