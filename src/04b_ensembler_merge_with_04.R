@@ -1,50 +1,123 @@
-library(feather)
+# library(feather)
 library(xts)
-library(tidyverse)
-library(lubridate)
-library(glue)
-library(ncdf4)
-library(purrr)
-library(reticulate)
+# library(glue)
+# library(ncdf4)
+# library(purrr)
 library(dygraphs)
 library(htmlwidgets)
 
-dir.create('in/lstm_out', showWarnings = FALSE)
-dir.create('in/lstm_out/pred', showWarnings = FALSE)
-dir.create('in/lstm_out/val', showWarnings = FALSE)
-dir.create('in/lstm_out/predictions', showWarnings = FALSE)
-dir.create('in/lstm_out/fit', showWarnings = FALSE)
+dir.create('out/lstm_out', showWarnings = FALSE)
+dir.create('out/lstm_out/pred', showWarnings = FALSE)
+dir.create('out/lstm_out/val', showWarnings = FALSE)
+dir.create('out/lstm_out/predictions', showWarnings = FALSE)
+dir.create('out/lstm_out/fit', showWarnings = FALSE)
 
-### 1b. adjust the test periods to include all manual Q (run once) ####
+### COPY FILES, ADJUST TEST PERIODS, RE-PICKLE, RE-EVAL (not for production) ####
 
-# # note: gotta rerun pickle_train_periods.py first
+RUNTYPE = 'run'#CHANGE TO "FINETUNE" FOR SPECIALISTS
+neon_site = 'TECR' #when you get to MART, need to change name as well
+qjj_ = 2423:2452
 
-# runset_parent_dir = '/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/run_configs/runs_1718-1747'
-# rundirs0 = list.files(runset_parent_dir, pattern = 'run', full.names = FALSE)
-# for(rd in rundirs0){
-#     testrng_path = file.path(runset_parent_dir, rd, 'test_ranges.csv')
-#     read_csv(testrng_path) %>%
-#         mutate(start_dates = '2010-01-01') %>%
-#         write_csv(testrng_path)
-# }
+#copy configs and rundirs
+qjj = paste(range(qjj_), collapse = '-')
+file.copy(paste0('~/git/macrosheds/qa_experimentation/imputation/src/nh_methods/run_configs/runs_', qjj),
+          '~/git/macrosheds/papers/q_sim/in/lstm_configs', recursive = TRUE)
+zzj = list.files('~/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runs/', pattern = RUNTYPE, full.names = TRUE)
+zi_ <- grep(paste(paste0('^', RUNTYPE, qjj_, collapse = '|')), basename(zzj))
+rundirs0 <- zzj[zi_]
+for(r in rundirs0){
+    file.copy(r, 'out/lstm_runs/', recursive = TRUE)
+}
+
+#adjust test periods
+runset_parent_dir = paste0('in/lstm_configs/runs_', qjj)
+rundirs1 = list.files(runset_parent_dir, pattern = 'run', full.names = FALSE)
+# zzj = list.files('out/lstm_runs', pattern = RUNTYPE, full.names = TRUE)
+# zi_ <- grep(paste(paste0('^', RUNTYPE, qjj_, collapse = '|')), basename(zzj))
+# rundirs2 <- zzj[zi_]
+for(rd in rundirs1){
+    testrng_path = file.path(runset_parent_dir, rd, 'test_ranges.csv')
+    read_csv(testrng_path) %>%
+        mutate(start_dates = '2016-01-01',
+               end_dates = '2024-01-01') %>%
+        write_csv(testrng_path)
+
+    # qrq = grep(paste0('^', rd), basename(rundirs2))
+    # thisrun = rundirs2[qrq]
+    # testrng_path = file.path('out/lstm_runs', thisrun, 'test_ranges.csv')
+    # read_csv(testrng_path)
+}
+
+#re-pickle
+r2pyenv_template <- new.env()
+r2pyenv_template$confdir <- confdir
+r2pyenv_template$runset <- paste0('runs_', qjj)
+r2pyenv <- as.list(r2pyenv_template)
+py_run_file('src/lstm_dungeon/pickle_train_periods.py')
+
+#replace paths with PLACEHOLDERs (old config location)
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim|PLACEHOLDER3|g' -i"))
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/out/lstm_runs|PLACEHOLDER2|g' -i"))
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_configs|PLACEHOLDER|g' -i"))
+system(paste0("find in/lstm_configs -name 'pretrained_model_loc.txt' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/out/lstm_runs|PLACEHOLDER2|g' -i"))
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim|PLACEHOLDER3|g' -i"))
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runs|PLACEHOLDER2|g' -i"))
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/run_configs|PLACEHOLDER|g' -i"))
+system(paste0("find in/lstm_configs -name 'pretrained_model_loc.txt' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runs|PLACEHOLDER2|g' -i"))
+
+# system(paste0("find in/lstm_configs/runs_", qjj, " -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim|PLACEHOLDER3|g' -i"))
+# system(paste0("find in/lstm_configs/runs_", qjj, " -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runs|PLACEHOLDER2|g' -i"))
+# system(paste0("find in/lstm_configs/runs_", qjj, " -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/run_configs|PLACEHOLDER|g' -i"))
+# system(paste0("find in/lstm_configs/runs_", qjj, " -name 'pretrained_model_loc.txt' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runs|PLACEHOLDER2|g' -i"))
+#(old run location)
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim|PLACEHOLDER3|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runs|PLACEHOLDER2|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/run_configs|PLACEHOLDER|g' -i"))
+#(new config location)
+# system(paste0("find in/lstm_configs/runs_", qjj, " -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim|PLACEHOLDER3|g' -i"))
+# system(paste0("find in/lstm_configs/runs_", qjj, " -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/out/lstm_runs|PLACEHOLDER2|g' -i"))
+# system(paste0("find in/lstm_configs/runs_", qjj, " -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_configs|PLACEHOLDER|g' -i"))
+# system(paste0("find in/lstm_configs/runs_", qjj, " -name 'pretrained_model_loc.txt' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/out/lstm_runs|PLACEHOLDER2|g' -i"))
+#(new run location)
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim|PLACEHOLDER3|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/out/lstm_runs|PLACEHOLDER2|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_configs|PLACEHOLDER|g' -i"))
+
+#set paths (same as chunk starting line 25 in 04_run_lstms.R)
+cfgs <- list.files('.', pattern = '.*\\.yml$', recursive = TRUE, full.names = TRUE)
+cfgs <- c(cfgs, list.files('.', pattern = 'pretrained_model_loc',
+                           recursive = TRUE, full.names = TRUE))
+for(cfg_ in cfgs){
+
+    read_file(cfg_) %>%
+        str_replace_all('PLACEHOLDER3', datadir) %>%
+        str_replace_all('PLACEHOLDER2', rundir) %>%
+        str_replace_all('PLACEHOLDER', confdir) %>%
+        write_file(cfg_)
+}
+
+#re-evaluate
+r2pyenv_template$wdir <- getwd()
+r2pyenv_template$runrange <- as.integer(qjj_)
+r2pyenv <- as.list(r2pyenv_template)
+py_run_file('src/lstm_dungeon/re-evaluate_models.py')
+
 
 ### 2. get LSTM stuff together ####
 
-neon_site = 'TECR'
-
-neon_q_manual = read_csv(glue('../imputation/data/neon_field_Q/{neon_site}.csv')) %>%
+neon_q_manual = read_csv(glue('in/neon_field_Q/{neon_site}.csv')) %>%
     mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
     rename(discharge_manual = discharge) %>%
     distinct(datetime, .keep_all = TRUE) %>%
-    mutate(date = date(datetime))
+    mutate(date = as.Date(datetime))
 
-runlist = paste(1718:1747, collapse = '|')
-rundirs = list.files('../imputation/src/nh_methods/runs', pattern = '^run') %>%
+runlist = paste(qjj_, collapse = '|')
+rundirs = list.files('out/lstm_runs/', pattern = '^run') %>%
     str_match(glue('run(?:{runlist})_[0-9_]+')) %>%
     {.[, 1]} %>%
     na.omit() #still has attrs
 
-ws_area_ha = na.omit(site_data$ws_area_ha[site_data$site_code == neon_site])
+ws_area_ha = na.omit(neon_areas$ws_area_ha[neon_areas$site_code == neon_site])
 ensemble_runs = list()
 nses = rep(NA, length(rundirs))
 holdout_nses = rep(NA, length(rundirs))

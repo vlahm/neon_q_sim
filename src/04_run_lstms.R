@@ -2,8 +2,7 @@
 # vlahm13@gmail.com
 # last edit: 2023-04-04
 
-library(readr)
-library(stringr)
+library(tidyverse)
 library(reticulate)
 
 #see step 2 in src/lstm_dungeon/README.txt for installing conda environment
