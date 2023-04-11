@@ -135,17 +135,17 @@ get_neon_inst_discharge <- function(neon_sites){
     for(i in seq_along(neon_sites)){
 
         s <- neon_sites[i]
-        print(s)
+        # print(s)
 
         #continuous discharge measurements
-        if(file.exists(paste0('debris/neon_q_dl/', s, '.rds'))) next #
+        # if(file.exists(paste0('debris/neon_q_dl/', s, '.rds'))) next #
 
         qd <- neonUtilities::loadByProduct('DP4.00130.001', site = s,
                                            check.size = FALSE,
                                            release = 'RELEASE-2023')
 
-        write_lines(paste0(s, '\n'), 'log/neonq_qc.txt', append = T) #
-        saveRDS(qd, paste0('debris/neon_q_dl', s, '.rds')) #
+        # write_lines(paste0(s, '\n'), 'log/neonq_qc.txt', append = T) #
+        # saveRDS(qd, paste0('debris/neon_q_dl', s, '.rds')) #
 
         q1 <- q2 <- tibble()
 
@@ -153,15 +153,15 @@ get_neon_inst_discharge <- function(neon_sites){
 
             q1 <- qd$csd_continuousDischarge
 
-            xx = table(q1$dischargeFinalQF, useNA = 'always')
-            write_lines('FinalQF', 'log/neonq_qc.txt', append = T)
-            write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
-            write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
-            xx = table(q1$dischargeFinalQFSciRvw, useNA = 'always')
-            write_lines('FinalQFSciRvm', 'log/neonq_qc.txt', append = T)
-            write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
-            write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
-            write_lines('', 'log/neonq_qc.txt', append = T)
+            # xx = table(q1$dischargeFinalQF, useNA = 'always')
+            # write_lines('FinalQF', 'log/neonq_qc.txt', append = T)
+            # write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
+            # write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
+            # xx = table(q1$dischargeFinalQFSciRvw, useNA = 'always')
+            # write_lines('FinalQFSciRvm', 'log/neonq_qc.txt', append = T)
+            # write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
+            # write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
+            # write_lines('', 'log/neonq_qc.txt', append = T)
 
             q1 <- q1 %>%
                 filter(is.na(dischargeFinalQF) | dischargeFinalQF == 0,
@@ -175,15 +175,15 @@ get_neon_inst_discharge <- function(neon_sites){
 
             q2 <- qd$csd_continuousDischargeUSGS
 
-            xx = table(q2$dischargeFinalQF, useNA = 'always')
-            write_lines('FinalQF', 'log/neonq_qc.txt', append = T)
-            write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
-            write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
-            xx = table(q2$dischargeFinalQFSciRvw, useNA = 'always')
-            write_lines('FinalQFSciRvm', 'log/neonq_qc.txt', append = T)
-            write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
-            write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
-            write_lines('', 'log/neonq_qc.txt', append = T)
+            # xx = table(q2$dischargeFinalQF, useNA = 'always')
+            # write_lines('FinalQF', 'log/neonq_qc.txt', append = T)
+            # write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
+            # write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
+            # xx = table(q2$dischargeFinalQFSciRvw, useNA = 'always')
+            # write_lines('FinalQFSciRvm', 'log/neonq_qc.txt', append = T)
+            # write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
+            # write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
+            # write_lines('', 'log/neonq_qc.txt', append = T)
 
             q2 <- q2 %>%
                 filter(is.na(dischargeFinalQFSciRvw) | dischargeFinalQFSciRvw == 0) %>%
@@ -200,7 +200,7 @@ get_neon_inst_discharge <- function(neon_sites){
             q <- q2
         }
 
-        write_lines('---------------\n\n', 'log/neonq_qc.txt', append = T)
+        # write_lines('---------------\n\n', 'log/neonq_qc.txt', append = T)
 
         q <- as_tibble(q) %>%
             mutate(site_code = s)
@@ -1257,6 +1257,28 @@ plots_and_results_rf <- function(neon_site, best, rf_df, results,
     # saveWidget(dg, glue('figs/lm_plots/pred/{neon_site}_log.html'))
 
     return(dg)
+}
+
+# LSTM
+
+run_lstm <- function(strategy, runset){
+
+    #strategy: one of 'generalist', 'specialist', 'pdgl' (aka process-guided specialist)
+    #runset: a list of run IDs, possibly split up into batches of runs as defined in
+    #   in/lstm_configs
+
+    strtgy <- ifelse(strategy == 'pgdl', 'specialist', strategy)
+
+    #crude way to pass variables into python script from R
+    r2pyenv_template <- new.env()
+    r2pyenv_template$wdir <- getwd()
+    r2pyenv_template$confdir <- confdir
+    r2pyenv_template$rundir <- rundir
+    r2pyenv_template$strategy <- strtgy
+    r2pyenv_template$runset <- paste0('runs_', paste(range(runset), collapse = '-'))
+    r2pyenv <- as.list(r2pyenv_template)
+
+    py_run_file('src/lstm_dungeon/run_lstms.py')
 }
 
 # potential for future use
