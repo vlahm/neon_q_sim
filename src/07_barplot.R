@@ -40,7 +40,7 @@ pgdl_runids <- 2248:2292
 
 pal <- c('black', rev(viridis::viridis(5, begin = 0.2, end = 1)))
 
-neon_sites <- read_csv('in/neon_site_info.csv') %>%
+neon_sites <- read_csv('in/NEON/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     pull(SiteID)
 
@@ -96,7 +96,7 @@ for(s in plotd$site){
 
     i <- which(plotd[, 'site'] == s)
 
-    neon_q_manual <- read_csv(glue('in/neon_field_Q/{s}.csv')) %>%
+    neon_q_manual <- read_csv(glue('in/NEON/neon_field_Q/{s}.csv')) %>%
         filter(! is.na(discharge)) %>%
         mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
         select(-site_code) %>%
@@ -218,7 +218,7 @@ plotd %>%
 
 #number of field measurements per site
 n_field_meas <- sapply(
-    list.files('in/neon_field_Q', full.names = TRUE),
+    list.files('in/NEON/neon_field_Q', full.names = TRUE),
     function(x) length(na.omit(read_csv(x)$discharge))
 ) %>% sort()
 

@@ -17,7 +17,7 @@ if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 
 ## 1. load data ####
 
-neon_sites <- read_csv('in/neon_site_info.csv') %>%
+neon_sites <- read_csv('in/NEON/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     st_as_sf(coords = c('Longitude', 'Latitude'))
 

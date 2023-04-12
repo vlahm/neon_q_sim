@@ -32,20 +32,20 @@ dir.create('in/NEON', showWarnings = FALSE)
 # (primary source here: https://www.neonscience.org/field-sites/explore-field-sites)
 
 #last retrieval: #2023-01-31
-if(! file.exists('in/neon_site_info.csv')){
+if(! file.exists('in/NEON/neon_site_info.csv')){
     download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
-                  destfile = 'in/neon_site_info.csv')
+                  destfile = 'in/NEON/neon_site_info.csv')
 }
 
 #last retrieval: #2023-01-31
-if(! file.exists('in/neon_site_info2.csv')){
+if(! file.exists('in/NEON/neon_site_info2.csv')){
     #filename changes with every update, so might have to modify URL below
     download.file('https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20220412.csv',
-                  destfile = 'in/neon_site_info2.csv')
+                  destfile = 'in/NEON/neon_site_info2.csv')
 }
 
 #last retrieval: #2023-01-31
-neon_areas <- read_csv('in/neon_site_info.csv') %>%
+neon_areas <- read_csv('in/NEON/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     mutate(ws_area_ha = WSAreaKm2 * 100) %>%
     select(site_code = SiteID, ws_area_ha)
@@ -60,20 +60,20 @@ if(! length(list.files('in/NEON/neon_continuous_Q/'))){
 }
 
 #last retrieval: #2023-01-31
-if(! length(list.files('in/neon_field_Q/'))){
+if(! length(list.files('in/NEON/neon_field_Q/'))){
     get_neon_field_discharge(neon_sites)
 }
 
 # NEON discharge evaluation results from Rhea et al. 2023
 
 #last retrieval: #2023-01-31
-if(! file.exists('in/neon_q_eval.csv')){
+if(! file.exists('in/NEON/neon_q_eval.csv')){
     download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_q_eval.csv',
-                  destfile = 'in/neon_q_eval.csv')
+                  destfile = 'in/NEON/neon_q_eval.csv')
 }
 
 #last retrieval: #2023-01-31
-q_eval <- read_csv('in/neon_q_eval.csv') %>%
+q_eval <- read_csv('in/NEON/neon_q_eval.csv') %>%
     filter(site %in% neon_sites)
 
 

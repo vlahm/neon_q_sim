@@ -207,7 +207,7 @@ camels_attr_static <- camels_attr_static %>%
 write_csv(camels_attr_static, 'in/lstm_data/attributes/camels_attributes.csv')
 
 
-## 4. prepare MacroSheds discharge ####
+## 4. prepare MacroSheds/NEON discharge ####
 
 neon_q <- map_dfr(list.files('in/NEON/neon_continuous_Q', full.names = TRUE),
                   function(x){
@@ -233,7 +233,7 @@ ms_q <- ms_q %>%
     ungroup()
 
 #clean neon continuous Q according to Rhea et al. 2023
-q_eval <- read_csv('in/neon_q_eval.csv') %>%
+q_eval <- read_csv('in/NEON/neon_q_eval.csv') %>%
     filter(site %in% neon_sites) %>%
     group_by(site, year, month) %>%
     summarize(keep = all(final_qual %in% c('Tier1', 'Tier2')), #dropping <= tier 3
@@ -287,9 +287,9 @@ ms_q <- ms_q %>%
     mutate(discharge = discharge * 0.001 * 1e-4 * 1000 * 86400 / ws_area_ha) %>%
     select(-ws_area_ha)
 
-## 5. prepare MacroSheds forcings ####
+## 5. prepare MacroSheds/NEON forcings ####
 
-ms_attr_dyn <- read_csv('in/macrosheds/neon_forcings.csv') %>%
+ms_attr_dyn <- read_csv('in/NEON/neon_forcings.csv') %>%
     mutate(domain = 'neon') %>%
     bind_rows(ms_attr_dyn) %>%
     filter(! is.na(domain), site_code != 'MC_ FLUME')
@@ -728,7 +728,7 @@ for(i in seq_along(neon_sites)){
     nc_q <- ncdf4::ncvar_get(nc_con, 'discharge')
     nc_date <- ncdf4::ncvar_get(nc_con, 'date')
 
-    field_q <- read_csv(paste0('in/neon_field_Q/', s, '.csv')) %>%
+    field_q <- read_csv(paste0('in/NEON/neon_field_Q/', s, '.csv')) %>%
         mutate(date = as.Date(datetime)) %>%
         left_join(ms_areas, by = 'site_code') %>%
         filter(! is.na(ws_area_ha)) %>%

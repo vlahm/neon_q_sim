@@ -100,7 +100,7 @@ for(i in seq_along(ensembles)){
     neon_site <- names(ensembles)[i]
     runlist <- unlist(ensembles[[i]])
 
-    neon_q_manual <- read_csv(glue('in/neon_field_Q/{neon_site}.csv')) %>%
+    neon_q_manual <- read_csv(glue('in/NEON/neon_field_Q/{neon_site}.csv')) %>%
         mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
         rename(discharge_manual = discharge) %>%
         distinct(datetime, .keep_all = TRUE) %>%

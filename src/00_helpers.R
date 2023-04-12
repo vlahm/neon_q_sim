@@ -59,7 +59,7 @@ rename_dir_structure <- function(){
 get_neon_field_discharge <- function(neon_sites){
 
     dir.create('in/NEON', showWarnings = FALSE)
-    dir.create('in/neon_field_Q', showWarnings = FALSE)
+    dir.create('in/NEON/neon_field_Q', showWarnings = FALSE)
 
     for(i in seq_along(neon_sites)){
 
@@ -125,7 +125,7 @@ get_neon_field_discharge <- function(neon_sites){
             mutate(site_code = s) %>%
             as_tibble()
 
-        write_csv(q, glue('in/neon_field_Q/{s}.csv'))
+        write_csv(q, glue('in/NEON/neon_field_Q/{s}.csv'))
     }
 }
 
@@ -220,7 +220,7 @@ assemble_q_df <- function(neon_site, nearby_usgs_gages = NULL, ms_Q_data = NULL,
     #ms_Q_data: data.frame with posixct datetime column, and Q columns. Each Q column must
     #have its site_code as header. transformed columns will be created
 
-    neon_q_manual = read_csv(glue('in/neon_field_Q/{neon_site}.csv')) %>%
+    neon_q_manual = read_csv(glue('in/NEON/neon_field_Q/{neon_site}.csv')) %>%
         mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
         rename(discharge_manual = discharge) %>%
         distinct(datetime, .keep_all = TRUE)
@@ -379,7 +379,7 @@ assemble_q_df_daily <- function(neon_site, ms_Q_data = NULL, scale_q_by_area = T
     #ms_Q_data: data.frame with date column, and Q columns. Each Q column must
     #have its site_code as header. transformed columns will be created
 
-    neon_q_manual = read_csv(glue('in/neon_field_Q/{neon_site}.csv')) %>%
+    neon_q_manual = read_csv(glue('in/NEON/neon_field_Q/{neon_site}.csv')) %>%
         mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
         rename(discharge_manual = discharge) %>%
         distinct(datetime, .keep_all = TRUE) %>%
@@ -777,7 +777,7 @@ plots_and_results <- function(neon_site, best, lm_df, results, return_plot = FAL
         filter(! is.na(discharge)) %>%
         rename(discharge_auto = discharge)
 
-    q_eval = read_csv('in/neon_q_eval.csv') %>%
+    q_eval = read_csv('in/NEON/neon_q_eval.csv') %>%
         filter(site == neon_site)
 
     q_eval = q_eval %>%
@@ -968,7 +968,7 @@ plots_and_results_daily_composite <- function(neon_site, best1, best2, lm_df1,
         filter(! is.na(discharge)) %>%
         rename(discharge_daily = discharge)
 
-    q_eval = read_csv('in/neon_q_eval.csv') %>%
+    q_eval = read_csv('in/NEON/neon_q_eval.csv') %>%
         filter(site == neon_site)
 
     q_eval = q_eval %>%
@@ -1201,7 +1201,7 @@ plots_and_results_rf <- function(neon_site, best, rf_df, results,
         filter(! is.na(discharge)) %>%
         rename(discharge_auto = discharge)
 
-    q_eval = read_csv('in/neon_q_eval.csv') %>%
+    q_eval = read_csv('in/NEON/neon_q_eval.csv') %>%
         # filter(site == 'BLDE')
         filter(site == neon_site)
 
@@ -1322,7 +1322,7 @@ plots_and_results_daily <- function(neon_site, best, lm_df, results){
         filter(! is.na(discharge)) %>%
         rename(discharge_daily = discharge)
 
-    q_eval = read_csv('in/neon_q_eval.csv') %>%
+    q_eval = read_csv('in/NEON/neon_q_eval.csv') %>%
         filter(site == neon_site)
 
     check1 = is.na(q_eval$regression_status) | q_eval$regression_status %in% c('good')

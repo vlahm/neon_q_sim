@@ -37,11 +37,11 @@ dev.off()
 
 # 2. site table ####
 
-sitelist <- read_csv('in/neon_site_info.csv') %>%
+sitelist <- read_csv('in/NEON/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     select(SiteID)
 
-read_csv('in/neon_site_info2.csv') %>%
+read_csv('in/NEON/neon_site_info2.csv') %>%
     right_join(sitelist, by = c('field_site_id' = 'SiteID')) %>%
     arrange(desc(field_watershed_size_km2)) %>%
     mutate(field_site_name = sub(' NEON$', '', field_site_name),

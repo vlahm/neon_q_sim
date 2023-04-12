@@ -21,7 +21,7 @@ if(! dir.exists('out/lstm_runs')) stop("you need to run src/04_run_lstms.R. It w
 
 ## 1. data prep ####
 
-neon_sites <- read_csv('in/neon_site_info.csv') %>%
+neon_sites <- read_csv('in/NEON/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     pull(SiteID)
 
