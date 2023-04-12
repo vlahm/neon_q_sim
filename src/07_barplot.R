@@ -104,7 +104,7 @@ for(s in plotd$site){
         summarize(discharge = mean(discharge, na.rm = TRUE)) %>%
         ungroup()
 
-    neon_q_auto <- read_csv(glue('in/neon_continuous_Q/{s}.csv')) %>%
+    neon_q_auto <- read_csv(glue('in/NEON/neon_continuous_Q/{s}.csv')) %>%
         filter(! is.na(discharge)) %>%
         select(-site_code)
 

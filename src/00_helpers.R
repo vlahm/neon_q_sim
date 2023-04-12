@@ -1,7 +1,7 @@
 #helper functions for the other R scripts. No need to source these directly.
 #start with 01_linear_regression.R
 
-#general
+#general (regression)
 
 Mode <- function(x, na.rm = TRUE){
 
@@ -27,7 +27,7 @@ inv_neglog <- function(x){
     return(inv_neglog_)
 }
 
-# setup
+# setup (regression)
 
 build_dir_structure <- function(){
 
@@ -58,6 +58,7 @@ rename_dir_structure <- function(){
 
 get_neon_field_discharge <- function(neon_sites){
 
+    dir.create('in/NEON', showWarnings = FALSE)
     dir.create('in/neon_field_Q', showWarnings = FALSE)
 
     for(i in seq_along(neon_sites)){
@@ -130,7 +131,8 @@ get_neon_field_discharge <- function(neon_sites){
 
 get_neon_inst_discharge <- function(neon_sites){
 
-    dir.create('in/neon_continuous_Q')
+    dir.create('in/NEON', showWarnings = FALSE)
+    dir.create('in/NEON/neon_continuous_Q')
 
     for(i in seq_along(neon_sites)){
 
@@ -205,7 +207,7 @@ get_neon_inst_discharge <- function(neon_sites){
         q <- as_tibble(q) %>%
             mutate(site_code = s)
 
-        write_csv(q, glue('in/neon_continuous_Q/{s}.csv'))
+        write_csv(q, glue('in/NEON/neon_continuous_Q/{s}.csv'))
     }
 }
 
@@ -771,7 +773,7 @@ plots_and_results <- function(neon_site, best, lm_df, results, return_plot = FAL
     #assemble neon sensor data, filtered neon sensor data, neon field data
     #into one frame and plot it
 
-    neon_q_auto = read_csv(glue('in/neon_continuous_Q/{neon_site}.csv')) %>%
+    neon_q_auto = read_csv(glue('in/NEON/neon_continuous_Q/{neon_site}.csv')) %>%
         filter(! is.na(discharge)) %>%
         rename(discharge_auto = discharge)
 
@@ -960,7 +962,7 @@ plots_and_results_daily_composite <- function(neon_site, best1, best2, lm_df1,
     #assemble neon sensor data, filtered neon sensor data, neon field data
     #into one frame and plot it
 
-    neon_q_daily = read_csv(glue('in/neon_continuous_Q/{neon_site}.csv')) %>%
+    neon_q_daily = read_csv(glue('in/NEON/neon_continuous_Q/{neon_site}.csv')) %>%
         group_by(date = date(datetime)) %>%
         summarize(discharge = mean(discharge, na.rm = TRUE)) %>%
         filter(! is.na(discharge)) %>%
@@ -1195,7 +1197,7 @@ plots_and_results_rf <- function(neon_site, best, rf_df, results,
     #assemble neon sensor data, filtered neon sensor data, neon field data
     #into one frame and plot it
 
-    neon_q_auto = read_csv(glue('in/neon_continuous_Q/{neon_site}.csv')) %>%
+    neon_q_auto = read_csv(glue('in/NEON/neon_continuous_Q/{neon_site}.csv')) %>%
         filter(! is.na(discharge)) %>%
         rename(discharge_auto = discharge)
 
@@ -1314,7 +1316,7 @@ plots_and_results_daily <- function(neon_site, best, lm_df, results){
     #assemble neon sensor data, filtered neon sensor data, neon field data
     #into one frame and plot it
 
-    neon_q_daily = read_csv(glue('in/neon_continuous_Q/{neon_site}.csv')) %>%
+    neon_q_daily = read_csv(glue('in/NEON/neon_continuous_Q/{neon_site}.csv')) %>%
         group_by(date = date(datetime)) %>%
         summarize(discharge = mean(discharge, na.rm = TRUE)) %>%
         filter(! is.na(discharge)) %>%

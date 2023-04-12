@@ -192,7 +192,7 @@ for(i in seq_along(pred_q)){
     neon_site <- names(pred_q)[i]
     pred_q_site <- pred_q[[i]]
 
-    neon_q_auto <- read_csv(glue('in/neon_continuous_Q/{neon_site}.csv')) %>%
+    neon_q_auto <- read_csv(glue('in/NEON/neon_continuous_Q/{neon_site}.csv')) %>%
         filter(! is.na(discharge)) %>%
         rename(discharge_auto = discharge)
 

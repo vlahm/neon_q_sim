@@ -1,12 +1,12 @@
 # Mike Vlah
 # vlahm13@gmail.com
 # last data retrieval dates given in comments below:
-# last edit: 2023-03-29
+# last edit: 2023-04-12
 
+library(raster)
 library(tidyverse)
 library(macrosheds)
 library(ncdf4)
-library(feather)
 library(lubridate)
 library(imputeTS)
 library(foreach)
@@ -20,6 +20,7 @@ options(readr.show_progress = FALSE,
 
 #pre-bundled in/out data available at: [**]
 if(! exists('ts_plot')) source('src/00_helpers.R')
+source('src/lstm_dungeon/camels_helpers.R')
 if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 
 dir.create('in/lstm_data/attributes', recursive = TRUE, showWarnings = FALSE)
@@ -27,17 +28,78 @@ dir.create('in/lstm_data/time_series/', recursive = TRUE, showWarnings = FALSE)
 
 ## 1. retrieve additional input data for LSTM simulation ####
 
-#the CAMELS dataset is available here: https://gdex.ucar.edu/dataset/camels.html,
-#but note that the current version is organized differently from the one we used,
-#which was downloaded on 2021-12-11. We recommend just downloading our bundled input data from
-#[]
+#NEON watershed boundary shapefiles; 2023-04-12
+download.file('https://www.neonscience.org/sites/default/files/NEONAquaticWatershed_0.zip',
+              'in/NEON/NEONAquaticWatershed_0.zip')
+
+#CAMELS forcings and USGS streamflow (only extracting necessary files); 2023-04-12
+if(! dir.exists('in/CAMELS/basin_dataset_public_v1p2')){
+
+    dir.create('in/CAMELS', showWarnings = FALSE)
+    download.file('https://gdex.ucar.edu/dataset/camels/file/basin_timeseries_v1p2_metForcing_obsFlow.zip',
+                  destfile = 'in/CAMELS/basin_timeseries_v1p2_metForcing_obsFlow.zip')
+    zf <- unzip('in/CAMELS/basin_timeseries_v1p2_metForcing_obsFlow.zip', list = TRUE)
+    unzip('in/CAMELS/basin_timeseries_v1p2_metForcing_obsFlow.zip',
+          files = c(grep('v1p2/basin_mean_forcing/daymet', zf$Name, value = TRUE),
+                    grep('v1p2/usgs_streamflow', zf$Name, value = TRUE)),
+          exdir = 'in/CAMELS')
+    unlink('in/CAMELS/basin_timeseries_v1p2_metForcing_obsFlow.zip')
+}
+
+#CAMELS basin attributes; 2023-04-12
+if(! file.exists('in/CAMELS/camels_attributes_v2.0/camels_hydro.txt')){
+
+    dir.create('in/CAMELS/camels_attributes_v2.0', showWarnings = FALSE)
+    download.file('https://gdex.ucar.edu/dataset/camels/file/camels_clim.txt',
+                  destfile = 'in/CAMELS/camels_attributes_v2.0/camels_clim.txt')
+    download.file('https://gdex.ucar.edu/dataset/camels/file/camels_soil.txt',
+                  destfile = 'in/CAMELS/camels_attributes_v2.0/camels_soil.txt')
+    download.file('https://gdex.ucar.edu/dataset/camels/file/camels_vege.txt',
+                  destfile = 'in/CAMELS/camels_attributes_v2.0/camels_vege.txt')
+    download.file('https://gdex.ucar.edu/dataset/camels/file/camels_topo.txt',
+                  destfile = 'in/CAMELS/camels_attributes_v2.0/camels_topo.txt')
+    download.file('https://gdex.ucar.edu/dataset/camels/file/camels_geol.txt',
+                  destfile = 'in/CAMELS/camels_attributes_v2.0/camels_geol.txt')
+    download.file('https://gdex.ucar.edu/dataset/camels/file/camels_hydro.txt',
+                  destfile = 'in/CAMELS/camels_attributes_v2.0/camels_hydro.txt')
+}
+
+#CAMELS basin shapefiles; 2023-04-12
+if(! file.exists('in/CAMELS/HCDN_nhru_final_671.shp')){
+    download.file('https://gdex.ucar.edu/dataset/camels/file/basin_set_full_res.zip',
+                  destfile = 'in/CAMELS/basin_set_full_res.zip')
+    unzip('in/CAMELS/basin_set_full_res.zip', exdir = 'in/CAMELS/')
+    unlink('in/CAMELS/basin_set_full_res.zip')
+}
+
+#Daymet model output (for SWE); 2023-04-12
+if(! dir.exists('in/CAMELS/basin_dataset_public_v1p2/model_output_daymet')){
+    download.file('https://gdex.ucar.edu/dataset/camels/file/basin_timeseries_v1p2_modelOutput_daymet.zip',
+                  destfile = 'in/CAMELS/basin_timeseries_v1p2_modelOutput_daymet.zip')
+    zf <- unzip('in/CAMELS/basin_timeseries_v1p2_modelOutput_daymet.zip', list = TRUE)
+    unzip('in/CAMELS/basin_timeseries_v1p2_modelOutput_daymet.zip',
+          files = grep('output/flow_timeseries/daymet/[0-9]{2}/[^\\.]+_model_output\\.txt',
+                       zf$Name, value = TRUE),
+          exdir = 'in/CAMELS/basin_dataset_public_v1p2/')
+    unlink('in/CAMELS/basin_timeseries_v1p2_modelOutput_daymet.zip')
+}
+
+#Re-calibration of Priestley-Taylor coefficient apt=1.26 for ETo method
+#(Priestley and Taylor, 1972) using ASCE-EWRI method (Allen et al., 2005)
+#for short ref.crop [from Aschonitis et al. 2017]; retrieved 2023-04-12
+if(! dir.exists('in/CAMELS/aptt1_30s')){
+    download.file('https://hs.pangaea.de/model/ESRN-Database/30arc-sec/aptt1_30s.zip',
+                  'in/CAMELS/priestly_taylor_recalibration.zip')
+    unzip('in/CAMELS/priestly_taylor_recalibration.zip', exdir = 'in/CAMELS/')
+    unlink('in/CAMELS/priestly_taylor_recalibration.zip')
+}
 
 #National Hydrologic Model (v1) data were provided to us for each CAMELS
 #and MacroSheds site by the USGS. A minimal copy of this dataset (omitting
 #files superfluous to this analysis) is included with our bundled input data
-#on []
+#at []
 
-#retrieve MacroSheds core dataset and CAMELS-compliant MacroSheds attributes
+#retrieve MacroSheds core dataset and CAMELS-compliant MacroSheds attributes; 2023-04-12
 
 if(! dir.exists('in/macrosheds/arctic')){
 
@@ -67,9 +129,14 @@ ms_attr_dyn <- ms_load_product(macrosheds_root = './in/macrosheds',
 nhm_sites_ms <- read_csv('in/NHMv1/sites_with_segids.csv')
 nhm_sites_camels <- read_csv('in/NHMv1/camels_gauge_info_with_segids.csv')
 
+
+## X. recompute CAMELS forcings; build NEON forcings and attributes ####
+
+source('src/lstm_dungeon/recompute_camels_climate.R', local = new.env())
+
 ## 2. prepare MacroSheds static attributes; write CSV ####
 
-ms_attr_static <- read_csv('in/macrosheds/neon_attrs.csv') %>%
+ms_attr_static <- read_csv('in/NEON/neon_attrs.csv') %>%
     mutate(domain = 'neon') %>%
     bind_rows(ms_attr_static) %>%
     filter(! is.na(domain), site_code != 'MC_ FLUME') %>%
@@ -122,8 +189,8 @@ camels_attr_static <- camels_geol %>%
 # macrosheds sites. for consistency, we replace those original CAMELS attrs
 # with our own recomputed ones (pet_mean, aridity, frac_snow, soil fractions)
 camels_mod_attrs <- full_join(
-    read_feather('in/CAMELS/recomputed_attributes/clim.feather'),
-    read_feather('in/CAMELS/recomputed_attributes/soil.feather'),
+    read_csv('in/CAMELS/recomputed_attributes/clim.csv'),
+    read_csv('in/CAMELS/recomputed_attributes/soil.csv'),
     by = 'site_code'
 )
 
@@ -142,7 +209,7 @@ write_csv(camels_attr_static, 'in/lstm_data/attributes/camels_attributes.csv')
 
 ## 4. prepare MacroSheds discharge ####
 
-neon_q <- map_dfr(list.files('in/neon_continuous_Q', full.names = TRUE),
+neon_q <- map_dfr(list.files('in/NEON/neon_continuous_Q', full.names = TRUE),
                   function(x){
                       read_csv(x) %>%
                           group_by(date = as.Date(datetime)) %>%
@@ -222,7 +289,7 @@ ms_q <- ms_q %>%
 
 ## 5. prepare MacroSheds forcings ####
 
-ms_attr_dyn <- read_feather('in/macrosheds/neon_forcings.feather') %>%
+ms_attr_dyn <- read_csv('in/macrosheds/neon_forcings.csv') %>%
     mutate(domain = 'neon') %>%
     bind_rows(ms_attr_dyn) %>%
     filter(! is.na(domain), site_code != 'MC_ FLUME')
@@ -379,6 +446,7 @@ daymet_files_agg <- grep('011230\\*|208111310_forcing|344894205_forcing', #rm wo
                          daymet_files_agg, value = TRUE, invert = TRUE)
 
 #the aggregate CAMELS dataset is missing all SWE information, so pulling it from the daymet model output
+# daymet_dir <- '/home/mike/git/macrosheds/qa_experimentation/data/CAMELS/basin_dataset_public_v1p2/model_output_daymet/model_output/flow_timeseries/daymet'
 daymet_dir <- 'in/CAMELS/basin_dataset_public_v1p2/model_output_daymet/model_output/flow_timeseries/daymet'
 daymet_files <- list.files(daymet_dir, pattern = 'model_output',
                            full.names = TRUE, recursive = TRUE)
@@ -401,7 +469,7 @@ megaloop_list[[k + 2]] <- (nfls - remaind + 1):nfls
 
 cmls_ts_splt <- list()
 cnt <- 0
-for(j in megaloop_list){
+for(iterchunk in megaloop_list){
 
     cnt <- cnt + 1
     print(paste('chunk', cnt, 'of', length(megaloop_list)))
@@ -413,7 +481,7 @@ for(j in megaloop_list){
     doParallel::registerDoParallel(clst)
 
     cmls_ts_splt0 <- foreach(
-        i = j,
+        i = iterchunk,
         .combine = append) %dopar% {
 
             q_file <- discharge_files[i]
@@ -469,9 +537,6 @@ for(j in megaloop_list){
                     select(-month, -day, -year, -hour)
             }
 
-            #also want to know if this pet is the same as what we calculate using gridded alpha parameter
-            #(it's not identical, but close)
-
             if(length(forcing_iterations)){
                 swe_mean <- purrr::map(forcing_iterations, ~.$swe) %>%
                     reduce(function(x, y) x + y) / 10
@@ -488,8 +553,10 @@ for(j in megaloop_list){
                               'swe', 'tmax', 'tmin', 'vp')
             ) %>%
                 as_tibble() %>%
-                mutate(date = as.double(ymd(paste(year, month, day)))) %>%
+                mutate(date = as.double(ymd(paste(year, month, day))),
+                       swe = ifelse(swe < 0, 0, swe)) %>%
                 select(-month, -day, -year, -hour)
+            print(table(f_data_cmls$swe))
 
             if(length(forcing_iterations)){
                 f_data_cmls = left_join(f_data_cmls,

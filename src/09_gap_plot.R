@@ -28,7 +28,7 @@ neon_sites <- read_csv('in/neon_site_info.csv') %>%
 #neon-official continuous Q data
 plotd <- list()
 for(s in neon_sites){
-    plotd[[s]] <- read_csv(paste0('in/neon_continuous_Q/', s, '.csv'))
+    plotd[[s]] <- read_csv(paste0('in/NEON/neon_continuous_Q/', s, '.csv'))
 }
 
 #linear regression predictions

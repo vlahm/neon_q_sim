@@ -26,6 +26,8 @@ source('src/00_helpers.R')
 
 ## 1. retrieve NEON data ####
 
+dir.create('in/NEON', showWarnings = FALSE)
+
 # NEON site metadata as reproduced by Rhea et al. 2023
 # (primary source here: https://www.neonscience.org/field-sites/explore-field-sites)
 
@@ -53,7 +55,7 @@ neon_sites <- neon_areas$site_code
 # NEON discharge data (field measurements and continuous)
 
 #last retrieval: #2023-03-09
-if(! length(list.files('in/neon_continuous_Q/'))){
+if(! length(list.files('in/NEON/neon_continuous_Q/'))){
     get_neon_inst_discharge(neon_sites)
 }
 

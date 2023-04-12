@@ -26,7 +26,7 @@ ranks <- read_csv('cfg/model_ranks.csv')
 
 load_q_neon <- function(site){
 
-    q <- read_csv(glue('in/neon_continuous_Q/{site}.csv')) %>%
+    q <- read_csv(glue('in/NEON/neon_continuous_Q/{site}.csv')) %>%
         mutate(source = 'NEON') %>%
         select(datetime, discharge_Ls = discharge, discharge_lower95_Ls = discharge_lower,
                discharge_upper95_Ls = discharge_upper, source)

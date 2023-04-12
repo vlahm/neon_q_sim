@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# Mike Vlah
+# vlahm13@gmail.com
+# last edit: 2023-04-01
+
 import pickle
 from pathlib import Path
 import matplotlib.pyplot as plt
