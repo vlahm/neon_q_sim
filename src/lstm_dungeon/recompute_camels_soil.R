@@ -5,22 +5,19 @@
 sm <- suppressMessages
 sw <- suppressWarnings
 
-boundaries <- st_read('neon_camels_attr/data/large/shapes')
-get_nrcs_soils <- function(network,
-                           domain,
-                           nrcs_var_name,
-                           site,
-                           ws_boundaries){
+dir.create('in/CAMELS/recomputed_attributes/soil', showWarnings = FALSE)
+
+# boundaries <- st_read('in/NEON/NEONAquaticWatershed/NEON_Aquatic_Watershed.shp')
+boundaries <- st_read('in/CAMELS/HCDN_nhru_final_671.shp')
+get_nrcs_soils <- function(network, domain, nrcs_var_name, site, ws_boundaries){
 
     # Use soilDB to download  soil map unit key (mukey) calssification raster
     site_boundary <- ws_boundaries %>%
-        filter(hru_id == site)
+        filter(hru_id == !!site)
 
     bb <- sf::st_bbox(site_boundary)
 
-    soil <- try(sw(soilDB::mukey.wcs(aoi = bb,
-                                     db = 'gssurgo',
-                                     quiet = TRUE)))
+    soil <- try(sw(soilDB::mukey.wcs(aoi = bb, db = 'gssurgo', quiet = TRUE)))
 
     # should build a chunking method for this
     if(class(soil) == 'try-error'){
@@ -52,10 +49,8 @@ get_nrcs_soils <- function(network,
     if(length(unique(component$compname)) == 1 &&
        unique(component$compname) == 'NOTCOM'){
 
-        this_var_tib <- tibble(site_code = site,
-                               year = NA,
-                               var =  names(nrcs_var_name),
-                               val = NA)
+        this_var_tib <- tibble(site_code = site, year = NA,
+                               var =  names(nrcs_var_name), val = NA)
 
         return(this_var_tib)
     }
@@ -214,148 +209,119 @@ get_nrcs_soils <- function(network,
 
 }
 
+clst_type <- ifelse(.Platform$OS.type == 'windows', 'PSOCK', 'FORK')
+ncores <- parallel::detectCores() %/% 2
+clst <- parallel::makeCluster(spec = ncores, type = clst_type)
+doParallel::registerDoParallel(clst)
 
-dir.create('neon_camels_attr/data/large/camels_soil')
+print(paste('recomputing camels soil metrics using', ncores, 'cores. may take a while.'))
+
 sites <- boundaries$hru_id
-for(s in 1:length(sites)){
-    print(s)
+catch <- foreach(i = seq_along(sites)) %dopar% {
 
-    # Soil Organic Matter
-    soil_tib <- try(sm(get_nrcs_soils(nrcs_var_name = c(
-                                      # percent
-                                      'soil_org' = 'om_r',
-                                      # percent
-                                      'soil_sand' = 'sandtotal_r',
-                                      # percent
-                                      'soil_silt' = 'silttotal_r',
-                                      # percent
-                                      'soil_clay' = 'claytotal_r',
-                                      # mass/volume
-                                      # 'soil_partical_density' = 'partdensity',
-                                      # micrometers per second
-                                      # 'soil_ksat' = 'ksat_r',
-                                      # centimeters of water per centimeter of soil,
-                                      # quantity of water that the soil is capable
-                                      # of storing for use by plants
-                                      'soil_awc' = 'awc_r',
-                                      # Water content, 1/10 bar, is the amount of soil
-                                      # water retained at a tension of 15 bars, expressed
-                                      # as a volumetric percentage of the whole
-                                      # soil material.
-                                      'soil_water_0.1bar' = 'wtenthbar_r',
-                                      # Water content, 1/3 bar, is the amount of soil
-                                      # water retained at a tension of 15 bars, expressed
-                                      # as a volumetric percentage of the whole
-                                      # soil material. 15 bar = wilting point
-                                      'soil_water_0.33bar' = 'wthirdbar_r',
-                                      # Water content, 15 bar, is the amount of soil
-                                      # water retained at a tension of 15 bars, expressed
-                                      # as a volumetric percentage of the whole
-                                      # soil material. 15 bar = field capacity
-                                      'soil_water_15bar' = 'wfifteenbar_r',
-                                      # Water content, 0 bar, is the amount of soil
-                                      # water retained at a tension of 15 bars, expressed
-                                      # as a volumetric percentage of the whole
-                                      # soil material.
-                                      'soil_water_0bar' = 'wsatiated_r',
-                                      # percent of carbonates, by weight, in the
-                                      # fraction of the soil less than 2 millimeters
-                                      # in size.
-                                      # 'pf_soil_carbonate' = 'caco3_r',
-                                      # percent, by weight hydrated calcium sulfates
-                                      # in the fraction of the soil less than 20
-                                      # millimeters in size
-                                      # 'pf_soil_gypsum' = 'gypsum_r',
-                                      # Cation-exchange capacity (CEC-7) is the
-                                      # total amount of extractable cations that can
-                                      # be held by the soil, expressed in terms of
-                                      # milliequivalents per 100 grams of soil at
-                                      # neutrality (pH 7.0)
-                                      'soil_cat_exchange_7' = 'cec7_r',
-                                      # Effective cation-exchange capacity refers to
-                                      # the sum of extractable cations plus aluminum
-                                      # expressed in terms of milliequivalents per
-                                      # 100 grams of soil
-                                      # 'pf_soil_cat_exchange_eff' = 'ecec_r',
-                                      # Electrical conductivity (EC) is the electrolytic
-                                      # conductivity of an extract from saturated
-                                      # soil paste, expressed as decisiemens per
-                                      # meter at 25 degrees C.
-                                      # 'pf_soil_elec_cond' = 'ec_r',
-                                      # Sodium adsorption ratio is a measure of the
-                                      # amount of sodium (Na) relative to calcium (Ca)
-                                      # and magnesium (Mg) in the water extract from
-                                      # saturated soil paste. It is the ratio of the
-                                      # Na concentration divided by the square root
-                                      # of one-half of the Ca + Mg concentration.
-                                      # Soils that have SAR values of 13 or more may
-                                      # be characterized by an increased dispersion
-                                      # of organic matter and clay particles, reduced
-                                      # saturated hydraulic conductivity (Ksat) and
-                                      # aeration, and a general degradation of soil
-                                      # structure.
-                                      # 'pf_soil_SAR' = 'sar_r',
-                                      # pH is the 1:1 water method. A crushed soil
-                                      # sample is mixed with an equal amount of water,
-                                      # and a measurement is made of the suspension.
-                                      'soil_ph' = 'ph1to1h2o_r'),
-                                  # Bulk density, one-third bar, is the ovendry
-                                  # weight of the soil material less than 2
-                                  # millimeters in size per unit volume of soil
-                                  # at water tension of 1/3 bar, expressed in
-                                  # grams per cubic centimeter
-                                  # 'pf_soil_bulk_density' = 'dbthirdbar_r'),
-                                  #Linear extensibility refers to the change in
-                                  # length of an unconfined clod as moisture
-                                  # content is decreased from a moist to a dry state.
-                                  # It is an expression of the volume change
-                                  # between the water content of the clod at
-                                  # 1/3- or 1/10-bar tension (33kPa or 10kPa tension)
-                                  # and oven dryness. The volume change is reported
-                                  # as percent change for the whole soil
-                                  # 'soil_linear_extend' = 'lep_r',
-                                  # Liquid limit (LL) is one of the standard
-                                  # Atterberg limits used to indicate the plasticity
-                                  # characteristics of a soil. It is the water
-                                  # content, on a percent by weight basis, of
-                                  # the soil (passing #40 sieve) at which the
-                                  # soil changes from a plastic to a liquid state
-                                  # 'soil_liquid_limit' = 'll_r',
-                                  # Plasticity index (PI) is one of the standard
-                                  # Atterberg limits used to indicate the plasticity
-                                  # characteristics of a soil. It is defined as
-                                  # the numerical difference between the liquid
-                                  # limit and plastic limit of the soil. It is
-                                  # the range of water content in which a soil
-                                  # exhibits the characteristics of a plastic solid.
-                                  # 'soil_plasticity_index' = 'pi_r'
-                                  site = sites[s],
-                                  ws_boundaries = boundaries)))
+    s <- sites[i]
 
-    if(inherits(soil_tib, 'try-error')) next
+    soil_tib <- try({
+        sm(get_nrcs_soils(
+            nrcs_var_name = c(
+                'soil_org' = 'om_r', # percent
+                'soil_sand' = 'sandtotal_r', # percent
+                'soil_silt' = 'silttotal_r', # percent
+                'soil_clay' = 'claytotal_r', # percent
+                # mass/volume
+                # 'soil_partical_density' = 'partdensity',
+                # micrometers per second
+                # 'soil_ksat' = 'ksat_r', centimeters of water per centimeter of
+                # soil, quantity of water that the soil is capable of storing
+                # for use by plants
+                'soil_awc' = 'awc_r',
+                # Water content, 1/10 bar, is the amount of soil water retained
+                # at a tension of 15 bars, expressed as a volumetric percentage
+                # of the whole soil material.
+                'soil_water_0.1bar' = 'wtenthbar_r',
+                # Water content, 1/3 bar, is the amount of soil water retained
+                # at a tension of 15 bars, expressed as a volumetric percentage
+                # of the whole soil material. 15 bar = wilting point
+                'soil_water_0.33bar' = 'wthirdbar_r',
+                # Water content, 15 bar, is the amount of soil water retained at
+                # a tension of 15 bars, expressed as a volumetric percentage of
+                # the whole soil material. 15 bar = field capacity
+                'soil_water_15bar' = 'wfifteenbar_r',
+                # Water content, 0 bar, is the amount of soil water retained at
+                # a tension of 15 bars, expressed as a volumetric percentage of
+                # the whole soil material.
+                'soil_water_0bar' = 'wsatiated_r',
+                # percent of carbonates, by weight, in the fraction of the soil
+                # less than 2 millimeters in size. 'pf_soil_carbonate' =
+                # 'caco3_r', percent, by weight hydrated calcium sulfates in the
+                # fraction of the soil less than 20 millimeters in size
+                # 'pf_soil_gypsum' = 'gypsum_r', Cation-exchange capacity
+                # (CEC-7) is the total amount of extractable cations that can be
+                # held by the soil, expressed in terms of milliequivalents per
+                # 100 grams of soil at neutrality (pH 7.0)
+                'soil_cat_exchange_7' = 'cec7_r',
+                # Effective cation-exchange capacity refers to the sum of
+                # extractable cations plus aluminum expressed in terms of
+                # milliequivalents per 100 grams of soil
+                # 'pf_soil_cat_exchange_eff' = 'ecec_r', Electrical conductivity
+                # (EC) is the electrolytic conductivity of an extract from
+                # saturated soil paste, expressed as decisiemens per meter at 25
+                # degrees C. 'pf_soil_elec_cond' = 'ec_r', Sodium adsorption
+                # ratio is a measure of the amount of sodium (Na) relative to
+                # calcium (Ca) and magnesium (Mg) in the water extract from
+                # saturated soil paste. It is the ratio of the Na concentration
+                # divided by the square root of one-half of the Ca + Mg
+                # concentration. Soils that have SAR values of 13 or more may be
+                # characterized by an increased dispersion of organic matter and
+                # clay particles, reduced saturated hydraulic conductivity
+                # (Ksat) and aeration, and a general degradation of soil
+                # structure. 'pf_soil_SAR' = 'sar_r', pH is the 1:1 water
+                # method. A crushed soil sample is mixed with an equal amount of
+                # water, and a measurement is made of the suspension.
+                'soil_ph' = 'ph1to1h2o_r'),
+            #Bulk density, one-third bar, is the ovendry weight of the soil
+            #material less than 2 millimeters in size per unit volume of soil at
+            #water tension of 1/3 bar, expressed in grams per cubic centimeter
+            #'pf_soil_bulk_density' = 'dbthirdbar_r'), Linear extensibility
+            #refers to the change in length of an unconfined clod as moisture
+            #content is decreased from a moist to a dry state. It is an
+            #expression of the volume change between the water content of the
+            #clod at 1/3- or 1/10-bar tension (33kPa or 10kPa tension) and oven
+            #dryness. The volume change is reported as percent change for the
+            #whole soil 'soil_linear_extend' = 'lep_r', Liquid limit (LL) is one
+            #of the standard Atterberg limits used to indicate the plasticity
+            #characteristics of a soil. It is the water content, on a percent by
+            #weight basis, of the soil (passing #40 sieve) at which the soil
+            #changes from a plastic to a liquid state 'soil_liquid_limit' =
+            #'ll_r', Plasticity index (PI) is one of the standard Atterberg
+            #limits used to indicate the plasticity characteristics of a soil.
+            #It is defined as the numerical difference between the liquid limit
+            #and plastic limit of the soil. It is the range of water content in
+            #which a soil exhibits the characteristics of a plastic solid.
+            #'soil_plasticity_index' = 'pi_r'
+            site = s,
+            ws_boundaries = boundaries))
+    })
 
-    write_feather(soil_tib, glue('neon_camels_attr/data/large/camels_soil/{s}.feather',
-                                 n = network,
-                                 d = domain,
-                                 s = sites[s]))
+    write_csv(soil_tib, glue('in/CAMELS/recomputed_attributes/soil/{s}.csv'))
 }
 
+parallel::stopCluster(clst)
 
-soil_fils <- list.files('neon_camels_attr/data/large/camels_soil/', full.names = T)
-
-all_soil <- map_dfr(soil_fils, read_feather)
-
-all_soil_fin <- all_soil %>%
+all_soil <- list.files('in/CAMELS/recomputed_attributes/soil',
+                       full.names = TRUE) %>%
+    map_dfr(read_csv) %>%
     filter(! var %in% c('soil_cat_exchange_7', 'soil_ph')) %>%
     mutate(n = nchar(site_code)) %>%
     mutate(site_code = ifelse(n == 7, paste0(0, site_code), site_code)) %>%
     select(-n, -year)
 
-write_feather(all_soil_fin, 'neon_camels_attr/data/large/soil.feather')
+write_csv(all_soil, 'in/CAMELS/recomputed_attributes/soil.csv')
 
+HERE. FIGURE OUT WHICH SOIL.FEATHER IS IN USE AND ONLY WRITE THAT ONE
 #is this supposed to be the same file as the line above?
 camels_soil <- read_feather('neon_camels_attr/data/large/camels_soil/soil.feather')
-camels_soil <- all_soil_fin
+camels_soil <- all_soil
 
 camels_soil <- camels_soil %>%
     select(-pctCellErr) %>%

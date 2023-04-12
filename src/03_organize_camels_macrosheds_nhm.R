@@ -13,6 +13,7 @@ library(foreach)
 library(doParallel)
 library(glue)
 library(sf)
+library(soilDB)
 
 options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
@@ -29,8 +30,15 @@ dir.create('in/lstm_data/time_series/', recursive = TRUE, showWarnings = FALSE)
 ## 1. retrieve additional input data for LSTM simulation ####
 
 #NEON watershed boundary shapefiles; 2023-04-12
-download.file('https://www.neonscience.org/sites/default/files/NEONAquaticWatershed_0.zip',
-              'in/NEON/NEONAquaticWatershed_0.zip')
+if(! dir.exists('in/NEON/NEONAquaticWatershed')){
+    download.file('https://www.neonscience.org/sites/default/files/NEONAquaticWatershed_0.zip',
+                  'in/NEON/NEONAquaticWatershed_0.zip')
+    zf <- unzip('in/NEON/NEONAquaticWatershed_0.zip', list = TRUE)
+    unzip('in/NEON/NEONAquaticWatershed_0.zip',
+          files = grep('[^\\_]NEON_Aquatic_Watershed\\.', zf$Name, value = TRUE),
+          exdir = 'in/NEON')
+    unlink('in/NEON/NEONAquaticWatershed_0.zip')
+}
 
 #CAMELS forcings and USGS streamflow (only extracting necessary files); 2023-04-12
 if(! dir.exists('in/CAMELS/basin_dataset_public_v1p2')){
@@ -99,7 +107,7 @@ if(! dir.exists('in/CAMELS/aptt1_30s')){
 #files superfluous to this analysis) is included with our bundled input data
 #at []
 
-#retrieve MacroSheds core dataset and CAMELS-compliant MacroSheds attributes; 2023-04-12
+## retrieve MacroSheds core dataset and CAMELS-compliant MacroSheds attributes; 2023-04-12
 
 if(! dir.exists('in/macrosheds/arctic')){
 
@@ -133,6 +141,10 @@ nhm_sites_camels <- read_csv('in/NHMv1/camels_gauge_info_with_segids.csv')
 ## X. recompute CAMELS forcings; build NEON forcings and attributes ####
 
 source('src/lstm_dungeon/recompute_camels_climate.R', local = new.env())
+
+neon_elevations <- read_csv('in/NEON/neon_site_info2.csv') %>%
+    select(site_code = field_site_id, elev = field_mean_elevation_m) %>%
+    filter(site_code %in% neon_sites)
 
 ## 2. prepare MacroSheds static attributes; write CSV ####
 
@@ -466,6 +478,8 @@ for(k in 0:(nchunks - 1)){
     megaloop_list[[k + 1]] <- 1:ncores + (k * ncores)
 }
 megaloop_list[[k + 2]] <- (nfls - remaind + 1):nfls
+
+print(paste('processing camels data using', ncores, 'cores. may take a while.'))
 
 cmls_ts_splt <- list()
 cnt <- 0
