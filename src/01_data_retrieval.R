@@ -106,7 +106,8 @@ ms_areas <- ms_load_sites() %>%
     filter(site_type == 'stream_gauge',
            ! is.na(ws_area_ha)) %>%
     select(site_code, ws_area_ha) %>%
-    distinct(site_code, .keep_all = TRUE)
+    distinct(site_code, .keep_all = TRUE) %>%
+    bind_rows(neon_areas)
 
 # donor gauge IDs
 

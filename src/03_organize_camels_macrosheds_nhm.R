@@ -194,13 +194,25 @@ ms_q <- lapply(ms_q, function(x){
     pre_buffer <- tibble(site_code = sc,
                          date = seq(first_q - 365, first_q - 1, 'day'),
                          discharge = NA_real_)
-    x = bind_rows(pre_buffer, x)
+    x <- bind_rows(pre_buffer, x)
+    return(x)
+})
+
+#additional buffer back to 2014 for NEON sites (to ensure prediction of field Q range)
+ms_q <- lapply(ms_q, function(x){
+    sc <- x$site_code[1]
+    if(! sc %in% neon_sites) return(x)
+    first_q <- x$date[1]
+    pre_buffer <- tibble(site_code = sc,
+                         date = seq(as.Date('2014-01-01'), first_q - 1, 'day'),
+                         discharge = NA_real_)
+    x <- bind_rows(pre_buffer, x)
     return(x)
 })
 
 ms_q <- map_dfr(ms_q, bind_rows)
 
-#convert to specific Q (~~ runoff)
+#convert to specific Q (~= runoff)
 ms_q <- ms_q %>%
     left_join(ms_areas, by = 'site_code') %>%
     filter(! is.na(ws_area_ha)) %>%
