@@ -29,3 +29,5 @@ mention:
     unzip input_data.zip
     need full camels dataset AND daymet isolate
     added custom eval param (pbias)
+    install rgee
+        setup config

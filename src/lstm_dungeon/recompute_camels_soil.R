@@ -7,7 +7,6 @@ sw <- suppressWarnings
 
 dir.create('in/CAMELS/recomputed_attributes/soil', showWarnings = FALSE)
 
-# boundaries <- st_read('in/NEON/NEONAquaticWatershed/NEON_Aquatic_Watershed.shp')
 boundaries <- st_read('in/CAMELS/HCDN_nhru_final_671.shp')
 get_nrcs_soils <- function(network, domain, nrcs_var_name, site, ws_boundaries){
 
