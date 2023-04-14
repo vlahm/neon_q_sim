@@ -23,9 +23,13 @@ if(! dir.exists('in/lstm_data')) source('src/03_organize_camels_macrosheds_nhm.R
 #establish run IDs
 param_search <- list(generalist = list(1468:1507, #batch 1
                                        1508:1520), #batch 2
-                     specialist = list(2293:2307, #batch 1
-                                       2308:2422), #batch 2
-                     pgdl = list(2248:2292))
+                     specialist = list(1548:1627, #batch 1
+                                       1748:1937), #batch 2
+                     # specialist = list(2293:2307, #batch 1
+                     #                   2308:2422), #batch 2
+                     pgdl = list(2059:2117)) #but also 1628:1657! just didn't find anything good there i guess
+#anyway the solution must be to include SOME or NO search runs?
+                     # pgdl = list(2248:2292))
 
 ensembles <- list(
     TECR = list(2423:2452)

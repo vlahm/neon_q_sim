@@ -7,3 +7,4 @@ debris/
 src/lstm_dungeon/dungeon_lvl_2
 .Rhistory
 log/
+cfg/google_auth.cfg
