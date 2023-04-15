@@ -27,21 +27,25 @@ param_search <- list(generalist = list(1468:1507, #batch 1
                                        1748:1937), #batch 2
                      # specialist = list(2293:2307, #batch 1
                      #                   2308:2422), #batch 2
-                     pgdl = list(2059:2117)) #but also 1628:1657! just didn't find anything good there i guess
+                     pgdl = list(2028:2117)) #but also 1628:1657! just didn't find anything good there i guess
 #anyway the solution must be to include SOME or NO search runs?
-                     # pgdl = list(2248:2292))
+
+#just for plotting. any sets that perform well in this stage get full ensembles
+mini_ensembles <- list(specialist = list(), #list(2293:2307, 2308:2397),
+                       pgdl = list(2248:2292))
 
 ensembles <- list(
-    TECR = list(2423:2452)
-    # BIGC = list(2453:2482),
-    # MART = list(2453:2482), #same ensemble as BIGC
-    # LECO = list(2453:2482), #same ensemble as BIGC
-    # WALK = list(2483:2512),
-    # MCRA = list(2513:2542), #
-    # COMO = list(2543:2572),
-    # HOPB = list(2573:2602),
-    # FLNT = list(2603:2632),
-    # BLDE = list(2633:2662)
+    TECR = list(2423:2452),
+    BIGC = list(2453:2482),
+    MART = list(2453:2482), #same ensemble as BIGC
+    LECO = list(2453:2482), #same ensemble as BIGC
+    WALK = list(2483:2512),
+    MCRA = list(2513:2542), #
+    COMO = list(2543:2572),
+    HOPB = list(2573:2602),
+    # FLNT = list(2603:2632), #wasn't actually using ms NHM for continue, but has legit validation continue tb
+    FLNT = list(2633:2662), #PGDL
+    # BLDE = list()  #SPECIALIST
 )
 
 # 2. setup (rigamarole) ####
@@ -88,6 +92,11 @@ run_lstm('pgdl', param_search$pgdl[[1]])
 run_lstm('generalist', ensembles$TECR[[1]])
 run_lstm('generalist', ensembles$BIGC[[1]])
 run_lstm('generalist', ensembles$WALK[[1]])
+run_lstm('generalist', ensembles$MCRA[[1]])
+run_lstm('generalist', ensembles$COMO[[1]])
+run_lstm('generalist', ensembles$HOPB[[1]])
+run_lstm('pgdl', ensembles$FLNT[[1]])
+# run_lstm('specialist', ensembles$BLDE[[1]])
 
 # 5. gather results of ensembles ####
 

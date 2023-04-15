@@ -31,11 +31,10 @@ dir.create('in/NEON', showWarnings = FALSE)
 # NEON site metadata as reproduced by Rhea et al. 2023
 # (primary source here: https://www.neonscience.org/field-sites/explore-field-sites)
 
-#last retrieval: #2023-01-31
+#last retrieval: #2023-04-14
 if(! file.exists('in/NEON/neon_site_info.csv')){
-    download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_site_info.csv',
+    download.file('https://www.hydroshare.org/resource/1a388391632f4277992889e2de152163/data/contents/neon_site_info.csv',
                   destfile = 'in/NEON/neon_site_info.csv')
-}
 
 #last retrieval: #2023-01-31
 if(! file.exists('in/NEON/neon_site_info2.csv')){
@@ -66,9 +65,9 @@ if(! length(list.files('in/NEON/neon_field_Q/'))){
 
 # NEON discharge evaluation results from Rhea et al. 2023
 
-#last retrieval: #2023-01-31
+#last retrieval: #2023-04-14
 if(! file.exists('in/NEON/neon_q_eval.csv')){
-    download.file('https://www.hydroshare.org/resource/03c52d47d66e40f4854da8397c7d9668/data/contents/neon_q_eval.csv',
+    download.file('https://www.hydroshare.org/resource/1a388391632f4277992889e2de152163/data/contents/neon_q_eval.csv',
                   destfile = 'in/NEON/neon_q_eval.csv')
 }
 
