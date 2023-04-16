@@ -35,6 +35,7 @@ dir.create('in/NEON', showWarnings = FALSE)
 if(! file.exists('in/NEON/neon_site_info.csv')){
     download.file('https://www.hydroshare.org/resource/1a388391632f4277992889e2de152163/data/contents/neon_site_info.csv',
                   destfile = 'in/NEON/neon_site_info.csv')
+}
 
 #last retrieval: #2023-01-31
 if(! file.exists('in/NEON/neon_site_info2.csv')){

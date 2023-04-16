@@ -423,48 +423,70 @@ assemble_q_df_daily <- function(neon_site, ms_Q_data = NULL, scale_q_by_area = T
     return(joined)
 }
 
-# ridge regression ####
+# regression ####
 
-regress <- function(data, full_spec, unscale_q_by_area = TRUE,
-                    k_folds = 10, plot_marg = TRUE, type = 'ridge', ...){
+glmnet_wrap <- function(data, full_spec, unscale_q_by_area = TRUE,
+                        k_folds = 10, cv_ensemble = 10, plot_marg = TRUE,
+                        alpha = 0, ...){
 
     #data: a data frame with a date column, and all columns referenced in model_list
     #full_spec: formula; the fully specified model to regularize via L2 (ridge regression)
+    #cv_ensemble: the number of cross-validation procedures to carry out. optimal
+    #   lambda varies according to how observations are randomly allocated to CV folds.
+    #   so, select `cv_ensemble` optimal lambdas and average them.
     #plot_marg: logical. plot marginal relationships
-    #type: either "ridge" or "lasso"
+    #alpha: 0 = ridge; 1 = lasso; see ?glmnet
     #...: additional arguments passed to glmnet AND cv.glmnet
 
     ## run regression with 10-fold crossval
 
-    y <- data$discharge_log
     x <- model.matrix(full_spec, data = data)
-    alpha <- if(type == 'ridge') 0 else if(type == 'lasso') 1
+    mod_inds <- complete.cases(data)
+    y <- data$discharge_log[mod_inds]
+    data_filt <- data[mod_inds, ]
 
     ## get cross-validated predictions and metrics
 
-    better_mse <- Inf
+    best_mse <- Inf
     neon_site <- data$site_code[1]
     wsa <- filter(ms_areas, site_code == neon_site) %>% pull(ws_area_ha)
     for(i in 0:1){
 
-        cv_model_ <- cv.glmnet(x, y, alpha = alpha, n_folds = k_folds,
-                               intercept = as.logical(i), type.measure = 'mse', ...)
-        cvpred <- c(predict(cv_model_, s = 'lambda.min', newx = x))
+        n_samp <- length(y)
+        # fold_ids <- sample(rep(1:10, length.out = n_samp), size = n_samp)
 
-        if(unscale_q_by_area){
-            sim_ <- inv_neglog(cvpred) * wsa / 1000 #un-scale by 1000. see assemble_q_df
-            obs_ <- data$discharge * wsa / 1000
-        } else {
-            sim_ <- inv_neglog(cvpred)
-            obs_ <- data$discharge
+        sim_mat <- obs_mat <- matrix(NA_real_, nrow = n_samp, ncol = cv_ensemble)
+        lambda_vec <- rep(NA_real_, cv_ensemble)
+        for(j in 1:cv_ensemble){
+
+            cv_model_ <- cv.glmnet(x, y, alpha = alpha, n_folds = k_folds, #foldid = fold_ids
+                                   intercept = as.logical(i), type.measure = 'mse', ...)
+            lambda_vec[j] <- cv_model_$lambda.min
+            cvpred <- c(predict(cv_model_, s = 'lambda.min', newx = x))
+
+            if(unscale_q_by_area){
+                sim_mat[, j] <- inv_neglog(cvpred) * wsa / 1000 #un-scale by 1000. see assemble_q_df
+                obs_mat[, j] <- data_filt$discharge * wsa / 1000
+            } else {
+                sim_mat[, j] <- inv_neglog(cvpred)
+                obs_mat[, j] <- data_filt$discharge
+            }
         }
 
-        print(tibble(nse = hydroGOF::NSE(sim_, obs_), kge = hydroGOF::KGE(sim_, obs_)))
+        best_lambda_ <- mean(lambda_vec)
+        sim_ <- apply(sim_mat, 1, mean, na.rm = TRUE)
+        obs_ <- apply(obs_mat, 1, mean, na.rm = TRUE)
 
-        if(hydroGOF::mse(sim_, obs_) < better_mse){
-            cv_model <- cv_model_
+        print(tibble(nse = hydroGOF::NSE(sim_, obs_),
+                     kge = hydroGOF::KGE(sim_, obs_)))
+
+        new_mse <- hydroGOF::mse(sim_, obs_)
+        if(new_mse < best_mse){
+            best_mse <- new_mse
+            # cv_model <- cv_model_
             sim <- sim_
             obs <- obs_
+            best_lambda <- best_lambda_
             intcpt <- as.logical(i)
         }
     }
@@ -494,30 +516,28 @@ regress <- function(data, full_spec, unscale_q_by_area = TRUE,
     gd <- do.call("grid.arrange", c(ggps))
     if(plot_marg) plot(gd)
 
-    ## handle novel seasonal factor values (silly way, using code from obsolete approach)
-
-    dd <- filter(data, if_all(all_of(c(dep, indeps)), ~ ! is.na(.)))
+    ## handle novel seasonal factor values
 
     if('season' %in% indeps){
-        modeled_seasons <- lm(full_spec, data = dd)$xlevels$season
-        modseas_inds <- as.character(data$season) %in% modeled_seasons
+        modeled_seasons <- sort(as.character(unique(data_filt$season)))
+        modseas_inds <- as.character(data_filt$season) %in% modeled_seasons
     } else {
         modeled_seasons <- as.character(1:4)
-        modseas_inds <- rep(TRUE, nrow(data))
+        modseas_inds <- rep(TRUE, nrow(data_filt))
     }
 
     ## run regression with optimal lambda and generate predictions + metrics
 
-    best_lambda <- cv_model$lambda.min
     best_model <- glmnet(x, y, alpha = alpha, lambda = best_lambda, intercept = intcpt, ...)
 
     data$lm <- NA_real_
     bestpred <- predict(best_model, s = best_lambda, newx = x[modseas_inds, ])
+
     if(unscale_q_by_area){
-        data$lm[modseas_inds] <- inv_neglog(bestpred) * wsa / 1000
+        data$lm[mod_inds][modseas_inds] <- inv_neglog(bestpred) * wsa / 1000
         data$discharge <- data$discharge * wsa / 1000
     } else {
-        data$lm[modseas_inds] <- inv_neglog(bestpred)
+        data$lm[mod_inds][modseas_inds] <- inv_neglog(bestpred)
     }
 
     data$lm[data$lm < 0] <- 0
@@ -581,21 +601,364 @@ regress <- function(data, full_spec, unscale_q_by_area = TRUE,
         }
     }
 
-    if(intcpt){
+    full_spec_ignoreint <- full_spec
+    if(! intcpt){
         full_spec <- update(full_spec, ~ . - 1)
     }
 
     out <- list(best_model = full_spec,
-                best_model_object = best_model, #update if this is used later
+                best_model_ignoreint = full_spec_ignoreint,
+                best_model_object = best_model,
                 prediction = unname(data$lm),
                 lm_data = plot_data,
-                # score = nse_out,  #ignore now
-                # score_crossval = best_score,
-                metrics = metr, #name change
-                metrics_crossval = metr_cv, #name change
+                metrics = metr,
+                metrics_crossval = metr_cv,
                 fits = gd)
 
     return(out)
+}
+
+generate_nested_formulae <- function(full_spec, d,
+                                     interactions = TRUE, through_origin = TRUE,
+                                     min_points_per_param = 15,
+                                     max_interaction = Inf){
+
+    #full_spec: a formula representing the full model specification (all possible predictors)
+    #d: a data frame. must include dependent variable from full_spec as a column name
+    #interactions: are interaction terms allowed? see max_interaction
+    #through_origin: should 0-intercept models be generated?
+    #min_points_per_param: at least this many data points must be present for each
+    #   parameter included in resulting formulae.
+    #max_interaction: the maximum number of terms that may interact, e.g. if 3,
+    #   then formulae with x:y:z:w will be filtered from the results.
+
+    #returns a list of formulae
+
+    trms = rownames(attributes(terms(full_spec))$factors)
+
+    y = trms[1]
+    y_nobacktick = gsub('`', '', y)
+    trms = trms[! trms == y]
+    ntrms = length(trms)
+
+    indeps = list()
+    for(i in seq_len(ntrms)){
+        indeps = append(indeps, combn(trms, i, simplify = FALSE))
+    }
+
+    if(interactions){
+        int_trms = Filter(function(x) length(x) > 1, indeps) %>%
+            map(~paste(., collapse = ':')) %>%
+            unlist()
+    }
+
+    max_params = sum(! is.na(d[[y_nobacktick]])) %/% min_points_per_param #https://statisticsbyjim.com/regression/overfitting-regression-models/
+    indeps = Filter(function(x) length(x) <= max_params, indeps)
+
+    if(! length(indeps)) stop('not enough data')
+
+    mods = list()
+    modind = 0
+    for(i in seq_along(indeps)){
+
+        modind = modind + 1
+        mods[[modind]] = as.formula(glue('{y} ~ {paste(indeps[[i]], collapse = "+")}'))
+
+        if(through_origin){
+            modind = modind + 1
+            mods[[modind]] = as.formula(glue('{y} ~ 0 + {paste(indeps[[i]], collapse = "+")}'))
+        }
+
+        if(interactions){
+
+            valid_ints_for_indep = map(int_trms, ~str_split(., ':')[[1]]) %>%
+                map(~all(. %in% indeps[[i]])) %>%
+                unlist()
+            ints_to_tack_on = int_trms[valid_ints_for_indep]
+            ints_to_tack_on = Filter(function(x) length(strsplit(x, ':')[[1]]) < max_params, ints_to_tack_on)
+            ints_to_tack_on = Filter(function(x) length(strsplit(x, ':')[[1]]) <= max_interaction, ints_to_tack_on)
+
+            jj = min(length(ints_to_tack_on), (max_params - 2))
+            for(j in seq_len(jj)){
+
+                int_trm_grps = combn(ints_to_tack_on, j, simplify = FALSE)
+                int_trm_grps = Filter(function(x) length(x) < (max_params - 2), int_trm_grps)
+
+                for(grp in int_trm_grps){
+
+                    modind = modind + 1
+                    mods[[modind]] = as.formula(glue('{y} ~ {xs} + {xs_int}',
+                                                     xs = paste(indeps[[i]], collapse = '+'),
+                                                     xs_int = paste(grp, collapse = '+')))
+
+                    if(through_origin){
+                        modind = modind + 1
+                        mods[[modind]] = as.formula(glue('{y} ~ 0 + {xs} + {xs_int}',
+                                                         xs = paste(indeps[[i]], collapse = '+'),
+                                                         xs_int = paste(grp, collapse = '+')))
+                    }
+                }
+            }
+        }
+    }
+
+    param_counts = sapply(mods, function(x) sum(grepl('season', attr(terms(x), 'term.labels')) * 2 + 1)) + 1
+    is_through_origin = sapply(mods, function(x) grepl('^0 +', as.character(x)[3]))
+    param_counts = param_counts - is_through_origin
+    mods = mods[param_counts <= max_params]
+
+    mods <- Filter(function(x){
+        trms <- attr(terms(x), 'term.labels')
+        length(trms) > 1 || trms != 'season'
+    }, mods)
+
+    return(mods)
+}
+
+lm_wrap <- function(data, model_list, metric,
+                    unscale_q_by_area = TRUE, k_folds = 10){
+
+    #data: a data frame with a date column, and all columns referenced in model_list
+    #model_list: a list of lm formulae, as generated by generate_nested_formulae
+    #metric: [IGNORED - uses NSE] a function for evaluating the models. the first argument to this function
+    #   will be the predictions, and the second will be the observations for the dependent variable
+
+    #lots of vestigial code in this function. sincere apologies.
+
+    log = 'xy'
+    best_mod = NA
+    best_score = -Inf
+    for(i in seq_along(model_list)){
+
+        try({
+
+            trms = rownames(attributes(terms(model_list[[i]]))$factors)
+            indeps = gsub('`', '', trms[-1])
+            dep = gsub('`', '', trms[1])
+            dep_transformed = sub('_log', '', dep)
+
+            dd = filter(data, if_all(all_of(c(dep, indeps)), ~ ! is.na(.)))
+
+            tryCatch({
+                dd = CVlm(data = dd, model_list[[i]], m = k_folds,
+                          plotit = FALSE, printit = FALSE)
+            }, warning = function(w) stop('rank-deficiency detected. moving on.'))
+
+            if(log == 'xy'){
+
+                neon_site = data$site_code[1]
+                if(unscale_q_by_area){
+                    wsa = filter(ms_areas, site_code == neon_site) %>% pull(ws_area_ha)
+                    sim = inv_neglog(dd$cvpred) * wsa / 1000
+                    nsenum = sum((inv_neglog(dd$cvpred) * wsa / 1000 - inv_neglog(dd[[dep]]) * wsa / 1000)^2) #just checking
+                } else {
+                    sim = inv_neglog(dd$cvpred)
+                    nsenum = sum((inv_neglog(dd$cvpred) - inv_neglog(dd[[dep]]))^2)
+                }
+            }
+
+            if(unscale_q_by_area){
+                obs = pull(dd[dep_transformed]) * wsa / 1000
+            } else {
+                obs = pull(dd[dep_transformed])
+            }
+
+            nsedenom = sum((obs - mean(obs))^2)
+            nse_ = 1 - (nsenum / nsedenom)
+
+            nse = hydroGOF::NSE(sim, obs)
+
+            if(! all.equal(nse, nse_)) stop('oi')
+
+            if(nse > best_score){
+                best_score = nse
+                best_mod = i
+
+                metr_cv = tibble(
+                    nse = nse,
+                    kge = hydroGOF::KGE(sim, obs),
+                    rmse = hydroGOF::rmse(sim, obs),
+                    mae = hydroGOF::mae(sim, obs),
+                    pbias = hydroGOF::pbias(sim, obs)
+                )
+            }
+        })
+    }
+
+    trms = rownames(attributes(terms(model_list[[best_mod]]))$factors)
+    dep = gsub('`', '', trms[1])
+    indeps = gsub('`', '', trms[-1])
+    if(length(indeps) == 1 && indeps == 'season') stop('season is the only indep. rubbish site(s)')
+    site_indeps = grep('season', indeps, invert = TRUE, value = TRUE)
+
+    dd = filter(data, if_all(all_of(c(dep, indeps)), ~ ! is.na(.)))
+    m = lm(model_list[[best_mod]], data = dd)
+
+    ggps = list()
+    yvar = ifelse(log %in% c('y', 'xy'), 'discharge_log', 'discharge')
+    for(i in seq_along(site_indeps)){
+        d2 = filter(data, ! is.na(!!sym(yvar)) & ! is.na(!!sym(site_indeps[i])))
+        ggps[[i]] = ggplot(d2, aes(x = !!sym(site_indeps[i]), y = !!sym(yvar))) +
+            geom_point() +
+            stat_smooth(method = "lm", col = "red")
+    }
+    gd = do.call("grid.arrange", c(ggps))
+    print(gd)
+
+    newdata = select(data, all_of(indeps))
+
+    if('season' %in% indeps){
+        modeled_seasons = m$xlevels$season
+        modseas_inds = as.character(newdata$season) %in% modeled_seasons
+    } else {
+        modeled_seasons = as.character(1:4)
+        modseas_inds = rep(TRUE, nrow(newdata))
+    }
+
+    data$lm = NA_real_
+
+    if(log %in% c('y', 'xy')){
+
+        if(unscale_q_by_area){
+            data$lm[modseas_inds] = inv_neglog(predict(m, newdata = newdata[modseas_inds, ])) * wsa / 1000
+            data$discharge = data$discharge * wsa / 1000
+        } else {
+            data$lm[modseas_inds] = inv_neglog(predict(m, newdata = newdata[modseas_inds, ]))
+        }
+
+    } else {
+        stop('unused')
+        data$lm[modseas_inds] = predict(m, newdata = newdata[modseas_inds, ])
+    }
+
+    data$lm[data$lm < 0] = 0
+
+    nse_out = hydroGOF::NSE(data$lm, data$discharge)
+
+    metr = tibble(
+        nse = nse_out,
+        kge = hydroGOF::KGE(data$lm, data$discharge),
+        rmse = hydroGOF::rmse(data$lm, data$discharge),
+        mae = hydroGOF::mae(data$lm, data$discharge),
+        pbias = hydroGOF::pbias(data$lm, data$discharge)
+    )
+
+    first_non_na = Position(function(x) ! is.na(x), data$lm)
+    last_non_na = nrow(data) - Position(function(x) ! is.na(x), rev(data$lm)) + 1
+    plot_data = data[first_non_na:last_non_na, ]
+
+    site_indeps = c(site_indeps, sub('_log', '', site_indeps))
+    drop_cols = grep('^[0-9]', colnames(plot_data), value = TRUE)
+    drop_cols = drop_cols[! drop_cols %in% site_indeps]
+    plot_data = select(plot_data, -any_of(drop_cols), -ends_with('_log')) %>%
+        select(site_code, any_of(c('date', 'datetime')), Q_neon_field = discharge, Q_predicted = lm,
+               everything())
+
+    if(unscale_q_by_area){
+
+        nearby_usgs_gages = grep('^[0-9]+$', colnames(plot_data), value = TRUE)
+        for(g in nearby_usgs_gages){
+
+            if(g == '06190540'){
+                plot_data[[g]] = plot_data[[g]] * 51089.73 #ha
+                next
+            }
+
+            nwissite = dataRetrieval::readNWISsite(g)
+
+            if(is.null(nwissite)) stop('cannot find nwis watershed area')
+
+            if(is.na(nwissite$contrib_drain_area_va)){
+                wsa = nwissite$drain_area_va * 258.999 #mi^2 -> ha
+            } else {
+                wsa = nwissite$contrib_drain_area_va * 258.999 #mi^2 -> ha
+            }
+
+            plot_data[[g]] = plot_data[[g]] * wsa / 1000
+        }
+
+        nearby_ms_gages = select(plot_data, -site_code, -any_of(c('date', 'datetime')),
+                                 -starts_with('Q_'), -season, -any_of(nearby_usgs_gages)) %>%
+            colnames()
+
+        for(g in nearby_ms_gages){
+            wsa = filter(ms_areas, site_code == g) %>% pull(ws_area_ha)
+            plot_data[[g]] = plot_data[[g]] * wsa / 1000
+        }
+    }
+
+    out = list(best_model = model_list[[best_mod]],
+               best_model_object = m,
+               prediction = unname(data$lm),
+               lm_data = plot_data,
+               # score = nse_out,
+               # score_crossval = best_score,
+               metrics = metr,
+               metrics_crossval = metr_cv,
+               # plot = dg,
+               fits = gd)
+
+    return(out)
+}
+
+regress <- function(neon_site, framework, ...){
+
+    #neon_site: 4-letter NEON site code, e.g. "REDB"
+    #framework: either 'lm' or 'glmnet'
+    #...: other arguments to lm_wrap or glmnet_wrap depending on the value of `framework`
+
+    #updates the `results` data frame as it goes
+    #returns list including:
+    #   best_model: chosen model, as a formula
+    #   best_model_ignoreint: glmnet only. same thing as best_model, but if
+    #       regression through the origin was successful, this won't indicate it.
+    #       used internally.
+    #   best_model_object: the glmnet or lm fit object
+    #   prediction: vector of best-model predictions for each observation
+    #   lm_data: a tibble of inputs. misnomer in case of glmnet
+    #   metrics: nse, kge, rmse, mae, pbias for best model
+    #   metrics_crossval: the same, but computed on out-of-sample folds during
+    #       cross-validation
+    #   fits: misnomer. just a plot of the marginal associations between each
+    #       predictor gauge and the response
+
+    if(! framework %in% c('lm', 'glmnet')){
+        stop('framework must be either "lm" or "glmnet"')
+    }
+
+    gage_ids <- donor_gauges[[neon_site]]
+
+    in_df <- assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gage_ids)
+
+    if(framework == 'lm'){
+
+        formulaB <- 'discharge_log ~ `{paste(paste0(gage_ids, "_log"), collapse = "`+`")}` + season'
+        # formulaC <- "discharge_log ~ `{paste(paste0(gage_ids, \"_log\"), collapse = \"`+`\")}`"
+
+        mods <- generate_nested_formulae(
+            full_spec = as.formula(glue(formulaB)),
+            d = in_df,
+            max_interaction = 3
+        )
+        best <- lm_wrap(data = in_df, model_list = mods, ...)
+
+    } else {
+
+        formulaB <- 'discharge_log ~ `{paste(paste0(gage_ids, "_log"), collapse = "`*`")}` * season'
+        # formulaC <- "discharge_log ~ `{paste(paste0(gage_ids, \"_log\"), collapse = \"`*`\")}`"
+
+        best <- glmnet_wrap(
+            data = in_df,
+            full_spec = as.formula(glue(formulaB)),
+            ...
+        )
+    }
+
+    results <- plots_and_results(neon_site, best, in_df, results)
+    results[results$site_code == neon_site, 'method'] <- framework
+    results <<- results
+
+    return(best)
 }
 
 plots_and_results <- function(neon_site, best, lm_df, results,
@@ -663,18 +1026,22 @@ plots_and_results <- function(neon_site, best, lm_df, results,
 
     } else if(inherits(best$best_model_object, 'glmnet')){
 
-        qall <- predict(best$best_model_object,
-                        s = best$best_model_object$lambda,
-                        newx = model.matrix(
-                            update(best$best_model, NULL ~ .),
-                            select(qall, all_of(site_indeps_log), any_of('season'))
-                        ),
-                        type = 'response') %>%
+        newx_ <- select(qall, all_of(site_indeps_log), any_of('season'))
+        qall$upr <- qall$lwr <- qall$fit <- NA_real_
+        # intcpt_inv <- as.numeric(! attr(terms(best$best_model), 'intercept'))
+
+        qall[complete.cases(newx_), c('fit', 'lwr', 'upr')] <- predict(
+                best$best_model_object,
+                s = best$best_model_object$lambda,
+                newx = model.matrix(update(best$best_model_ignoreint, NULL ~ .),
+                                    newx_),
+                type = 'response'
+            ) %>%
             as_tibble() %>%
-            mutate(across(everything(), ~ifelse(. < 0, 0, .))) %>%
-            mutate(across(everything(), inv_neglog)) %>%
             rename(fit = 1) %>%
-            bind_cols(qall)
+            mutate(lwr = NA_real_, upr = NA_real_, #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!TEMP!!!!!!!!!!!!!!!!!!!!!!
+                   across(everything(), ~ifelse(. < 0, 0, .)),
+                   across(everything(), inv_neglog))
 
     } else {
 
@@ -711,10 +1078,17 @@ plots_and_results <- function(neon_site, best, lm_df, results,
 
     if(inherits(best$fits, 'grob')){
 
-        #make diagnostic and fit plots
+        #make diagnostic and "fit" plots
+
         png(glue('figs/lm_plots/diag/{neon_site}_diag_log.png'), 6, 6, 'in', type = 'cairo', res = 300)
-        defpar = par(mfrow=c(2,2))
-        plot(best$best_model_object)
+        defpar = par(mfrow=c(2, 2))
+        if(! inherits(best$best_model_object, 'glmnet')){
+            plot(best$best_model_object)
+        } else {
+            plot(best$best_model_object, xvar = 'norm', label = TRUE)
+            plot(best$best_model_object, xvar = 'lambda', label = TRUE)
+            plot(best$best_model_object, xvar = 'dev', label = TRUE)
+        }
         par(defpar)
         dev.off()
 
@@ -744,8 +1118,8 @@ plots_and_results <- function(neon_site, best, lm_df, results,
     png(glue('figs/lm_plots/val/{neon_site}_obs_v_pred.png'), 6, 6, 'in', type = 'cairo', res = 300)
     plot(zz$Q_neon_field, zz$Q_predicted, xlab = 'NEON Field Discharge (L/s)',
          ylab = 'Predicted Discharge (L/s)', main = glue('Site: {neon_site}; NSE: {nse1}; NSE crossval: {nse2}',
-                                                         nse1 = round(best$score, 2),
-                                                         nse2 = round(best$score_crossval, 2)),
+                                                         nse1 = round(best$metrics$nse, 2),
+                                                         nse2 = round(best$metrics_crossval$nse, 2)),
          xlim = axlim, ylim = axlim, xaxs = 'i', yaxs = 'i')
     abline(a = 0, b = 1, col = 'blue')
     legend('topleft', legend = '1:1', lty = 1, col = 'blue', bty = 'n')
@@ -764,18 +1138,28 @@ plots_and_results <- function(neon_site, best, lm_df, results,
 
     #save model summary
     sink(glue('out/lm_out/summary/{neon_site}.txt'))
-    print(summary(best$best_model_object))
+    if(inherits(best$best_model_object, 'glmnet')){
+        print(best$best_model_object)
+        print('\n---\n')
+        print(summary(best$best_model_object))
+        print('\n---\n')
+        print(best$best_model_object$beta)
+    } else {
+        print(summary(best$best_model_object))
+    }
     sink()
 
     #return results frame, updated with this site's results
     results$bestmod[results$site_code == neon_site] = as.character(best$best_model)[3]
-    results$nse[results$site_code == neon_site] = best$score
-    results$nse_cv[results$site_code == neon_site] = best$score_crossval
-    results$kge[results$site_code == neon_site] = best$other_metrics$kge
-    results$kge_cv[results$site_code == neon_site] = best$other_metrics_crossval$kge
-    results$pbias[results$site_code == neon_site] = best$other_metrics$pbias
-    results$pbias_cv[results$site_code == neon_site] = best$other_metrics_crossval$pbias
-    results$adj_r_squared[results$site_code == neon_site] = summary(best$best_model_object)$adj.r.squared
+    results$nse[results$site_code == neon_site] = best$metrics$nse
+    results$nse_cv[results$site_code == neon_site] = best$metrics_crossval$nse
+    results$kge[results$site_code == neon_site] = best$metrics$kge
+    results$kge_cv[results$site_code == neon_site] = best$metrics_crossval$kge
+    results$pbias[results$site_code == neon_site] = best$metrics$pbias
+    results$pbias_cv[results$site_code == neon_site] = best$metrics_crossval$pbias
+    if(! inherits(best$best_model_object, 'glmnet')){
+        results$adj_r_squared[results$site_code == neon_site] = summary(best$best_model_object)$adj.r.squared
+    }
 
     if(unscale_q_by_area){
         write_csv(results, 'out/lm_out/results_specificq.csv')
@@ -968,14 +1352,14 @@ plots_and_results_daily_composite <- function(neon_site, best1, best2, lm_df1,
                                                             as.character(best1$best_model)[3],
                                                             sep = ' & ')
     results$nse[results$site_code == neon_site] = nse
-    results$nse_cv[results$site_code == neon_site] = mean(best1$score_crossval, best2$score_crossval)
+    results$nse_cv[results$site_code == neon_site] = mean(best1$metrics_crossval$nse, best2$metrics_crossval$nse)
     results$adj_r_squared[results$site_code == neon_site] = mean(summary(best1$best_model_object)$adj.r.squared,
                                                                  summary(best2$best_model_object)$adj.r.squared)
 
     results$kge[results$site_code == neon_site] = kge
-    results$kge_cv[results$site_code == neon_site] = mean(best1$other_metrics$kge, best2$other_metrics$kge)
+    results$kge_cv[results$site_code == neon_site] = mean(best1$metrics$kge, best2$metrics$kge)
     results$pbias[results$site_code == neon_site] = pbias
-    results$pbias_cv[results$site_code == neon_site] = mean(best1$other_metrics$pbias, best2$other_metrics$pbias)
+    results$pbias_cv[results$site_code == neon_site] = mean(best1$metrics$pbias, best2$metrics$pbias)
 
     if(unscale_q_by_area){
         write_csv(results, 'out/lm_out/results_specificq.csv')
@@ -1151,475 +1535,6 @@ run_lstm <- function(strategy, runset){
     r2pyenv <- as.list(r2pyenv_template)
 
     py_run_file('src/lstm_dungeon/run_lstms.py')
-}
-
-# storage hangar ####
-
-plots_and_results_daily <- function(neon_site, best, lm_df, results){
-
-    stop('not updated')
-    if(length(best$prediction) != nrow(lm_df)) stop('oi')
-
-    d = lm_df %>%
-        select(-ends_with('_log'), -season, -matches('[0-9]+'))
-
-    #load corroborating usgs/ms site data
-
-    sites_nearby = read_csv(glue('in/usgs_Q/{neon_site}.csv'))
-
-    #filter usgs/ms site data that didn't end up in the model
-    trms = rownames(attributes(terms(best$best_model))$factors)
-    dep = gsub('`', '', trms[1])
-    indeps = gsub('`', '', trms[-1])
-    indeps = gsub('_log', '', indeps)
-    if(length(indeps) == 1 && indeps == 'season') stop('season is the only indep. rubbish site(s)')
-    site_indeps = grep('season', indeps, invert = TRUE, value = TRUE)
-    site_indeps_log = paste0(site_indeps, '_log')
-
-    sites_nearby = sites_nearby %>%
-        select(date, all_of(site_indeps), all_of(site_indeps_log))
-
-    if('season' %in% indeps){
-        sites_nearby$season = factor(lubridate::quarter(sites_nearby$date))
-    }
-
-    #assemble neon sensor data, filtered neon sensor data, neon field data
-    #into one frame and plot it
-
-    neon_q_daily = read_csv(glue('in/NEON/neon_continuous_Q/{neon_site}.csv')) %>%
-        group_by(date = date(datetime)) %>%
-        summarize(discharge = mean(discharge, na.rm = TRUE)) %>%
-        filter(! is.na(discharge)) %>%
-        rename(discharge_daily = discharge)
-
-    q_eval = read_csv('in/NEON/neon_q_eval.csv') %>%
-        filter(site == neon_site)
-
-    check1 = is.na(q_eval$regression_status) | q_eval$regression_status %in% c('good')
-    check2 = is.na(q_eval$drift_status) | q_eval$drift_status %in% c('likely_no_drift', 'not_assessed')
-    check3 = is.na(q_eval$rating_curve_status) | q_eval$rating_curve_status %in% c('Tier1')
-
-    q_eval$keep = check1 & check2 & check3
-    q_eval = q_eval %>%
-        group_by(site, year, month) %>%
-        summarize(keep = any(keep), #not being strict here. won't be using sensor data in regression anyway
-                  .groups = 'drop')
-
-    neon_q_daily_qc = neon_q_daily %>%
-        mutate(year = year(date),
-               month = month(date)) %>%
-        left_join(select(q_eval, year, month, keep),
-                  by = c('year', 'month')) %>%
-        filter(keep) %>%
-        select(-keep, -year, -month) %>%
-        rename(discharge_daily_qc = discharge_daily)
-
-    #predict Q for all datetimes with predictor data
-
-
-    qall = left_join(sites_nearby, neon_q_daily, by = 'date') %>%
-        left_join(neon_q_daily_qc, by = 'date')
-
-    if(inherits(best$best_model_object, 'segmented')){
-        qall$pred = predict(best$best_model_object,
-                            newdata = select(qall, x1 = site_indeps_log)) %>%
-            inv_neglog()
-    } else {
-        qall$pred = predict(best$best_model_object,
-                            newdata = select(qall, all_of(site_indeps_log), any_of('season'))) %>%
-            inv_neglog()
-    }
-
-    out_data = qall %>%
-        select(-ends_with('_log'), -any_of('season')) %>%
-        full_join(select(lm_df, date, discharge), by = 'date') %>%
-        select(date, Q_predicted = pred, #Q_used_in_regression = discharge,
-               Q_neon_field = discharge,
-               Q_neon_daily_filtered = discharge_daily_qc,
-               Q_neon_daily_raw = discharge_daily) %>%
-        filter(if_any(-date, ~cumsum(! is.na(.)) != 0)) %>%  #remove leading NA rows
-        arrange(date)
-
-    dg = dygraphs::dygraph(xts(x = select(out_data, -date) %>% tail(5e5),
-                               order.by = tail(out_data$date, 5e5))) %>%
-        dyRangeSelector()
-
-    saveWidget(dg, glue('figs/lm_plots/pred/{neon_site}_log.html'))
-
-    if(inherits(best$fits, 'grob')){
-
-        #make diagnostic and fit plots
-        png(glue('figs/lm_plots/diag/{neon_site}_diag_log.png'), 6, 6, 'in', type = 'cairo', res = 300)
-        defpar = par(mfrow=c(2,2))
-        plot(best$best_model_object)
-        par(defpar)
-        dev.off()
-
-        png(glue('figs/lm_plots/fit/{neon_site}_fit_log.png'), 6, 6, 'in', type = 'cairo', res = 300)
-        plot(best$fits)
-        dev.off()
-    }
-
-    # #plot predictions versus field measurements. need to round field meas to Q interval
-    # time_diffs = diff(sites_nearby$date)
-    # units(time_diffs) = 'mins'
-    # time_interval = Mode(time_diffs)
-    #
-    # zz = out_data %>%
-    #     mutate(date = round_date(date, paste(time_interval, 'min')))
-    #
-    # field_dts = filter(zz, ! is.na(Q_neon_field)) %>% pull(date)
-    #
-    # zz = zz %>%
-    #     filter(date %in% field_dts) %>%
-    #     group_by(date) %>%
-    #     summarize(across(everything(), ~mean(., na.rm = TRUE))) %>%
-    #     ungroup()
-
-    axlim = c(0, max(c(out_data$Q_predicted, out_data$Q_neon_field), na.rm = TRUE))
-
-    png(glue('figs/lm_plots/val/{neon_site}_obs_v_pred.png'), 6, 6, 'in', type = 'cairo', res = 300)
-    plot(out_data$Q_neon_field, out_data$Q_predicted, xlab = 'NEON Field Discharge (L/s)',
-         ylab = 'Predicted Discharge (L/s)', main = glue('Site: {neon_site}; NSE: {nse1}; NSE crossval: {nse2}',
-                                                         nse1 = round(best$score, 2),
-                                                         nse2 = round(best$score_crossval, 2)),
-         xlim = axlim, ylim = axlim, xaxs = 'i', yaxs = 'i')
-    abline(a = 0, b = 1, col = 'blue')
-    legend('topleft', legend = '1:1', lty = 1, col = 'blue', bty = 'n')
-    dev.off()
-
-    #save combined frame
-    out_data = left_join(out_data,
-                         select(sites_nearby, date, all_of(site_indeps), any_of('season')),
-                         by = 'date')
-    write_csv(out_data, glue('out/lm_out/by_site/{neon_site}.csv'))
-
-    #return results frame, updated with this site's results
-    results$bestmod_logq[results$site_code == neon_site] = as.character(best$best_model)[3]
-    results$nse_logq[results$site_code == neon_site] = best$score
-    results$nse_cv_logq[results$site_code == neon_site] = best$score_crossval
-
-    return(results)
-}
-
-eval_model_set <- function(data, model_list, metric,
-                           unscale_q_by_area = TRUE, k_folds = 10){
-
-    #data: a data frame with a date column, and all columns referenced in model_list
-    #model_list: a list of lm formulae, as generated by generate_nested_formulae
-    #metric: [IGNORED - uses NSE] a function for evaluating the models. the first argument to this function
-    #   will be the predictions, and the second will be the observations for the dependent variable
-
-    log = 'xy'
-    best_mod = NA
-    best_score = -Inf
-    # do_not_center = c('date', 'site_code', 'season', 'discharge', 'discharge_log', 'discharge_neon_orig', 'discharge_neon_cont')
-    for(i in seq_along(model_list)){
-
-        try({
-
-            trms = rownames(attributes(terms(model_list[[i]]))$factors)
-            indeps = gsub('`', '', trms[-1])
-            dep = gsub('`', '', trms[1])
-            dep_transformed = sub('_log', '', dep)
-
-            dd = filter(data, if_all(all_of(c(dep, indeps)), ~ ! is.na(.)))
-            # dd = mutate(dd, across(-any_of(do_not_center), #for centering indeps. not necessary, since multicollinearity does not affect predictions
-            #                   ~ . - mean(., na.rm = TRUE)))
-            # ndata_per_fold = sum(! is.na(dd[[dep]])) %/% 30
-            # ndata_per_fold = ifelse(ndata_per_fold == 0, 1, ndata_per_fold)
-
-            tryCatch({
-                dd = CVlm(data = dd, model_list[[i]], m = k_folds,
-                          plotit = FALSE, printit = FALSE)
-            }, warning = function(w) stop('rank-deficiency detected. moving on.'))
-
-            if(log == 'xy'){
-
-                neon_site = data$site_code[1]
-                if(unscale_q_by_area){
-                    wsa = filter(ms_areas, site_code == neon_site) %>% pull(ws_area_ha)
-                    sim = inv_neglog(dd$cvpred) * wsa / 1000
-                    nsenum = sum((inv_neglog(dd$cvpred) * wsa / 1000 - inv_neglog(dd[[dep]]) * wsa / 1000)^2) #just checking
-                } else {
-                    sim = inv_neglog(dd$cvpred)
-                    nsenum = sum((inv_neglog(dd$cvpred) - inv_neglog(dd[[dep]]))^2)
-                }
-
-                # } else if(log == 'y'){
-                #     stop('do not use log = "y"')
-                #     nsenum = sum((inv_neglog(dd$cvpred) - dd[[dep]])^2)
-                # } else if(log == FALSE){
-                #     stop('do not use log = FALSE')
-                #     nsenum = sum((dd$cvpred - dd[[dep]])^2)
-            }
-
-            if(unscale_q_by_area){
-                obs = pull(dd[dep_transformed]) * wsa / 1000
-            } else {
-                obs = pull(dd[dep_transformed])
-            }
-
-            nsedenom = sum((obs - mean(obs))^2)
-            nse_ = 1 - (nsenum / nsedenom)
-
-            nse = hydroGOF::NSE(sim, obs)
-
-            if(! all.equal(nse, nse_)) stop('oi')
-
-            if(nse > best_score){
-                best_score = nse
-                best_mod = i
-
-                metr_cv = tibble(
-                    kge = hydroGOF::KGE(sim, obs),
-                    rmse = hydroGOF::rmse(sim, obs),
-                    mae = hydroGOF::mae(sim, obs),
-                    pbias = hydroGOF::pbias(sim, obs)
-                )
-            }
-        })
-    }
-
-    trms = rownames(attributes(terms(model_list[[best_mod]]))$factors)
-    dep = gsub('`', '', trms[1])
-    indeps = gsub('`', '', trms[-1])
-    if(length(indeps) == 1 && indeps == 'season') stop('season is the only indep. rubbish site(s)')
-    site_indeps = grep('season', indeps, invert = TRUE, value = TRUE)
-
-    #for un-centering (not right yet. since the means are based on dd, and data has more obs)
-    # dd = filter(data, if_all(all_of(c(dep, indeps)), ~ ! is.na(.)))
-    # ddmeans = summarize(dd, across(-any_of(do_not_center),
-    #                                ~mean(., na.rm = TRUE))) %>%
-    #     rename_with(~paste0(., '_mean'))
-    # dd = mutate(dd, across(-any_of(do_not_center),
-    #                        ~ . - mean(., na.rm = TRUE)))
-    # for(colm in setdiff(colnames(data), c(do_not_center, 'fold', 'Predicted', 'cvpred'))){
-    #     data[[colm]] = data[[colm]] - ddmeans[[paste0(colm, '_mean')]]
-    # }
-
-    dd = filter(data, if_all(all_of(c(dep, indeps)), ~ ! is.na(.)))
-    m = lm(model_list[[best_mod]], data = dd)
-
-    ggps = list()
-    yvar = ifelse(log %in% c('y', 'xy'), 'discharge_log', 'discharge')
-    for(i in seq_along(site_indeps)){
-        d2 = filter(data, ! is.na(!!sym(yvar)) & ! is.na(!!sym(site_indeps[i])))
-        ggps[[i]] = ggplot(d2, aes(x = !!sym(site_indeps[i]), y = !!sym(yvar))) +
-            geom_point() +
-            stat_smooth(method = "lm", col = "red")
-    }
-    gd = do.call("grid.arrange", c(ggps))
-    print(gd)
-
-    newdata = select(data, all_of(indeps))
-
-    if('season' %in% indeps){
-        modeled_seasons = m$xlevels$season
-        modseas_inds = as.character(newdata$season) %in% modeled_seasons
-    } else {
-        modeled_seasons = as.character(1:4)
-        modseas_inds = rep(TRUE, nrow(newdata))
-    }
-
-    data$lm = NA_real_
-
-    if(log %in% c('y', 'xy')){
-
-        if(unscale_q_by_area){
-            data$lm[modseas_inds] = inv_neglog(predict(m, newdata = newdata[modseas_inds, ])) * wsa / 1000
-            data$discharge = data$discharge * wsa / 1000
-        } else {
-            data$lm[modseas_inds] = inv_neglog(predict(m, newdata = newdata[modseas_inds, ]))
-        }
-
-    } else {
-        stop('unused')
-        data$lm[modseas_inds] = predict(m, newdata = newdata[modseas_inds, ])
-    }
-
-    data$lm[data$lm < 0] = 0
-
-    nse_out = hydroGOF::NSE(data$lm, data$discharge)
-
-    metr = tibble(
-        kge = hydroGOF::KGE(data$lm, data$discharge),
-        rmse = hydroGOF::rmse(data$lm, data$discharge),
-        mae = hydroGOF::mae(data$lm, data$discharge),
-        pbias = hydroGOF::pbias(data$lm, data$discharge)
-    )
-
-    first_non_na = Position(function(x) ! is.na(x), data$lm)
-    last_non_na = nrow(data) - Position(function(x) ! is.na(x), rev(data$lm)) + 1
-    plot_data = data[first_non_na:last_non_na, ]
-
-    site_indeps = c(site_indeps, sub('_log', '', site_indeps))
-    drop_cols = grep('^[0-9]', colnames(plot_data), value = TRUE)
-    drop_cols = drop_cols[! drop_cols %in% site_indeps]
-    plot_data = select(plot_data, -any_of(drop_cols), -ends_with('_log')) %>%
-        select(site_code, any_of(c('date', 'datetime')), Q_neon_field = discharge, Q_predicted = lm,
-               everything())
-
-    if(unscale_q_by_area){
-
-        nearby_usgs_gages = grep('^[0-9]+$', colnames(plot_data), value = TRUE)
-        for(g in nearby_usgs_gages){
-
-            if(g == '06190540'){
-                plot_data[[g]] = plot_data[[g]] * 51089.73 #ha
-                next
-            }
-
-            nwissite = dataRetrieval::readNWISsite(g)
-
-            if(is.null(nwissite)) stop('cannot find nwis watershed area')
-
-            if(is.na(nwissite$contrib_drain_area_va)){
-                wsa = nwissite$drain_area_va * 258.999 #mi^2 -> ha
-            } else {
-                wsa = nwissite$contrib_drain_area_va * 258.999 #mi^2 -> ha
-            }
-
-            plot_data[[g]] = plot_data[[g]] * wsa / 1000
-        }
-
-        nearby_ms_gages = select(plot_data, -site_code, -any_of(c('date', 'datetime')),
-                                 -starts_with('Q_'), -season, -any_of(nearby_usgs_gages)) %>%
-            colnames()
-
-        for(g in nearby_ms_gages){
-            wsa = filter(ms_areas, site_code == g) %>% pull(ws_area_ha)
-            plot_data[[g]] = plot_data[[g]] * wsa / 1000
-        }
-    }
-
-    # site_code = data$site_code[1]
-    #
-    # if(file.exists(ncdf)){
-    #
-    #     # xx = reticulate::py_load_object('src/nh_methods/runs/run1360_1907_011320/test/model_epoch030/test_results.p')
-    #     xx = reticulate::py_load_object('src/nh_methods/runs/run1361_1907_032422/test/model_epoch030/test_results.p')
-    #
-    #     pred = xx[[paste0(site, '_GAPPED')]]$`1D`$xr$discharge_sim$to_pandas()
-    #     pred = tibble(date = as.Date(rownames(pred)), Q = pred$`0`)
-    # }
-
-    # plot_data = select(plot_data, date, Q_predicted = lm, Q_used_in_regression = discharge,
-    #        Q_neon_continuous_filtered = discharge_neon_cont,
-    #        Q_neon_continuous_raw = discharge_neon_orig, Q_neon_manual = discharge_manual_forreals)
-    #
-    # dg = dygraphs::dygraph(xts(x = select(plot_data, -date), order.by = plot_data$date)) %>%
-    #     dyRangeSelector()
-
-    out = list(best_model = model_list[[best_mod]],
-               best_model_object = m,
-               prediction = unname(data$lm),
-               lm_data = plot_data,
-               score = nse_out,
-               score_crossval = best_score,
-               other_metrics = metr,
-               other_metrics_crossval = metr_cv,
-               # plot = dg,
-               fits = gd)
-
-    return(out)
-}
-
-generate_nested_formulae <- function(full_spec, d,
-                                     interactions = TRUE, through_origin = TRUE,
-                                     min_points_per_param = 15,
-                                     max_interaction = Inf){
-
-    #full_spec: a formula representing the full model specification (all possible predictors)
-    #d: a data frame. must include dependent variable from full_spec as a column name
-    #interactions: are interaction terms allowed? see max_interaction
-    #through_origin: should 0-intercept models be generated?
-    #min_points_per_param: at least this many data points must be present for each
-    #   parameter included in resulting formulae.
-    #max_interaction: the maximum number of terms that may interact, e.g. if 3,
-    #   then formulae with x:y:z:w will be filtered from the results.
-
-    #returns a list of formulae
-
-    trms = rownames(attributes(terms(full_spec))$factors)
-
-    y = trms[1]
-    y_nobacktick = gsub('`', '', y)
-    trms = trms[! trms == y]
-    ntrms = length(trms)
-
-    indeps = list()
-    for(i in seq_len(ntrms)){
-        indeps = append(indeps, combn(trms, i, simplify = FALSE))
-    }
-
-    if(interactions){
-        int_trms = Filter(function(x) length(x) > 1, indeps) %>%
-            map(~paste(., collapse = ':')) %>%
-            unlist()
-    }
-
-    max_params = sum(! is.na(d[[y_nobacktick]])) %/% min_points_per_param #https://statisticsbyjim.com/regression/overfitting-regression-models/
-    indeps = Filter(function(x) length(x) <= max_params, indeps)
-
-    if(! length(indeps)) stop('not enough data')
-
-    mods = list()
-    modind = 0
-    for(i in seq_along(indeps)){
-
-        modind = modind + 1
-        mods[[modind]] = as.formula(glue('{y} ~ {paste(indeps[[i]], collapse = "+")}'))
-
-        if(through_origin){
-            modind = modind + 1
-            mods[[modind]] = as.formula(glue('{y} ~ 0 + {paste(indeps[[i]], collapse = "+")}'))
-        }
-
-        if(interactions){
-
-            valid_ints_for_indep = map(int_trms, ~str_split(., ':')[[1]]) %>%
-                map(~all(. %in% indeps[[i]])) %>%
-                unlist()
-            ints_to_tack_on = int_trms[valid_ints_for_indep]
-            ints_to_tack_on = Filter(function(x) length(strsplit(x, ':')[[1]]) < max_params, ints_to_tack_on)
-            ints_to_tack_on = Filter(function(x) length(strsplit(x, ':')[[1]]) <= max_interaction, ints_to_tack_on)
-
-            jj = min(length(ints_to_tack_on), (max_params - 2))
-            for(j in seq_len(jj)){
-
-                int_trm_grps = combn(ints_to_tack_on, j, simplify = FALSE)
-                int_trm_grps = Filter(function(x) length(x) < (max_params - 2), int_trm_grps)
-
-                for(grp in int_trm_grps){
-
-                    modind = modind + 1
-                    mods[[modind]] = as.formula(glue('{y} ~ {xs} + {xs_int}',
-                                                     xs = paste(indeps[[i]], collapse = '+'),
-                                                     xs_int = paste(grp, collapse = '+')))
-
-                    if(through_origin){
-                        modind = modind + 1
-                        mods[[modind]] = as.formula(glue('{y} ~ 0 + {xs} + {xs_int}',
-                                                         xs = paste(indeps[[i]], collapse = '+'),
-                                                         xs_int = paste(grp, collapse = '+')))
-                    }
-                }
-            }
-        }
-    }
-
-    param_counts = sapply(mods, function(x) sum(grepl('season', attr(terms(x), 'term.labels')) * 2 + 1)) + 1
-    is_through_origin = sapply(mods, function(x) grepl('^0 +', as.character(x)[3]))
-    param_counts = param_counts - is_through_origin
-    mods = mods[param_counts <= max_params]
-
-    mods <- Filter(function(x){
-        trms <- attr(terms(x), 'term.labels')
-        length(trms) > 1 || trms != 'season'
-    }, mods)
-
-    return(mods)
 }
 
 # misc helpers required to generate figures/datasets ####

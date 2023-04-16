@@ -14,7 +14,7 @@ library(ggplot2)
 library(gridExtra)
 library(neonUtilities)
 library(htmlwidgets)
-# library(DAAG)
+library(DAAG)
 library(tidyverse)
 library(macrosheds)
 library(glmnet)
@@ -31,196 +31,46 @@ if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 
 build_dir_structure()
 
+#obsolete
 # formulaA <- 'discharge ~ {paste(gagenums, collapse = "+")} + season'
+
+#lm
 # formulaB <- 'discharge_log ~ `{paste(paste0(gagenums, "_log"), collapse = "`+`")}` + season'
 # formulaC <- "discharge_log ~ `{paste(paste0(gagenums, \"_log\"), collapse = \"`+`\")}`"
-formulaB <- 'discharge_log ~ `{paste(paste0(gagenums, "_log"), collapse = "`*`")}` * season'
-formulaC <- "discharge_log ~ `{paste(paste0(gagenums, \"_log\"), collapse = \"`*`\")}`"
 
-results_lm <- results_lm_noscale <- tibble(
-    site_code = neon_sites, nse = NA, nse_cv = NA, kge = NA, kge_cv = NA,
-    pbias = NA, pbias_cv = NA, bestmod = NA, adj_r_squared = NA
+#glmnet
+# formulaB <- 'discharge_log ~ `{paste(paste0(gagenums, "_log"), collapse = "`*`")}` * season'
+# formulaC <- "discharge_log ~ `{paste(paste0(gagenums, \"_log\"), collapse = \"`*`\")}`"
+
+results <- results_lm_noscale <- tibble(
+    site_code = neon_sites, method = NA, nse = NA, nse_cv = NA, kge = NA,
+    kge_cv = NA, pbias = NA, pbias_cv = NA, bestmod = NA, adj_r_squared = NA
 )
 
-## 2. linear regression (lm) on specific discharge ####
+## 2. OLS (lm) or ridge (glmnet) regression on specific discharge ####
 
-# REDB ####
-neon_site = 'REDB'; gagenums = donor_gauges[[neon_site]]
-lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-# remove erroneous outlier (both sites on same stream reach. one could not report >100L/s while the other reports <10L/s)
-lm_df = filter(lm_df, as.Date(datetime) != as.Date('2019-06-12'))
-mods = generate_nested_formulae(
-    full_spec = as.formula(glue(formulaB)),
-    d = lm_df, interactions = TRUE, through_origin = TRUE)
-best = eval_model_set(data = lm_df, model_list = mods)
-results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
+regress(neon_site = 'REDB', framework = 'lm')
+regress(neon_site = 'HOPB', framework = 'lm')
+regress(neon_site = 'KING', framework = 'glmnet')
+regress(neon_site = 'BLUE', framework = 'lm')
+regress(neon_site = 'CUPE', framework = 'glmnet') #
+regress(neon_site = 'GUIL', framework = 'glmnet')
+# TECR not yet viable by this approach. requires updated KREW donor gauges
+regress(neon_site = 'SYCA', framework = 'lm')
 
-
-neon_site = 'REDB'; gagenums = donor_gauges[[neon_site]]
-lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-# remove erroneous outlier (both sites on same stream reach. one could not report >50L/s while the other reports <10L/s)
-# lm_df = filter(lm_df, as.Date(datetime) != as.Date('2017-12-05'))
-best = regress(data = lm_df, full_spec = as.formula(glue(formulaB)))
-# results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
-
-# HOPB ####
-neon_site = 'HOPB'; gagenums = donor_gauges[[neon_site]]
-lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-mods = generate_nested_formulae(
-    full_spec = as.formula(glue(formulaB)),
-    d = lm_df, interactions = TRUE, through_origin = TRUE)
-best = eval_model_set(data = lm_df, model_list = mods)
-results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
-
-# KING ####
-neon_site = 'KING'; gagenums = donor_gauges[[neon_site]]
-lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-# lm_df$`06879650`[lm_df$`06879650` > 1200 & ! is.na(lm_df$discharge)] = NA
-mods = generate_nested_formulae(
-    full_spec = as.formula(glue(formulaB)),
-    d = lm_df,
-    min_points_per_param = 15,
-    max_interaction = 3,
-    interactions = TRUE)
-best = eval_model_set(data = lm_df, model_list = mods)
-results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
-
-# BLUE ####
-neon_site = 'BLUE'; gagenums = donor_gauges[[neon_site]]
-lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-mods = generate_nested_formulae(
-    full_spec = as.formula(glue(formulaB)),
-    d = lm_df,
-    min_points_per_param = 15,
-    interactions = TRUE)
-best = eval_model_set(data = lm_df, model_list = mods)
-results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
-
-# CUPE ####
-neon_site = 'CUPE'; gagenums = donor_gauges[[neon_site]]
-lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-mods = generate_nested_formulae(
-    full_spec = as.formula(glue(formulaB)),
-    d = lm_df,
-    min_points_per_param = 15,
-    interactions = TRUE)
-best = eval_model_set(data = lm_df, model_list = mods)
-results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
-
-# GUIL ####
-neon_site = 'GUIL'; gagenums = donor_gauges[[neon_site]]
-lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-mods = generate_nested_formulae(
-    full_spec = as.formula(glue(formulaB)),
-    d = lm_df,
-    interactions = TRUE,
-    min_points_per_param = 15,
-    max_interaction = 3)
-best = eval_model_set(data = lm_df, model_list = mods)
-results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
-
-# TECR [not yet viable. requires updated KREW donor gauges] ####
-# neon_site = 'TECR'; gagenums = c('11216400') #gagenums = 'T003'
-# lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-# mods = generate_nested_formulae(
-#     full_spec = as.formula(glue(formulaB)),
-#     d = lm_df,
-#     interactions = TRUE)
-# best = eval_model_set(data = lm_df, model_list = mods)
-# results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
-
-# SYCA ####
-
-# neon_site = 'SYCA'; gagenums = c('09510200', '09499000') 09510150
-neon_site = 'SYCA'; gagenums = donor_gauges[[neon_site]]
-lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-# include_sensor_daterange = c('2019-06-01', '2020-07-01'))
-# ggplot(lm_df, aes(x=`09510200_log`, y = `discharge_log`)) + geom_point()
-
+formulaB <- 'discharge_log ~ `{paste(paste0(gage_ids, "_log"), collapse = "`+`")}` + season'
+neon_site <- 'SYCA'
+gage_ids <- donor_gauges[[neon_site]]
+lm_df <- assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gage_ids)
 # remove erroneous outlier (sites separated by < 10 km on same river with no major intervening tribs.
 #   very unlikely for one to report >100L/s while the other reports ~15L/s). This measurement also followed a long hiatus.
-lm_df = filter(lm_df, ! as.Date(datetime) == as.Date('2021-07-26'))
+lm_df <- filter(lm_df, ! as.Date(datetime) == as.Date('2021-07-26'))
+mods <- generate_nested_formulae(as.formula(glue(formulaB)), lm_df)
+best <- lm_wrap(data = lm_df, model_list = mods)
+results_lm <- plots_and_results(neon_site, best, lm_df, results_lm)
 
-mods = generate_nested_formulae(
-    full_spec = as.formula(glue(formulaB)),
-    d = lm_df,
-    interactions = TRUE,
-    min_points_per_param = 15,
-    max_interaction = 3)
-best = eval_model_set(data = lm_df, model_list = mods)
-results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
-
-# lm_df$x1 = lm_df$`09510200_log`
-# m = lm(discharge_log ~ x1, data = lm_df)
-# m_piecewise = segmented(m, seg.Z = ~x1, npsi=1)
-# lm_df$best_prediction = inv_neglog(predict(m_piecewise, newdata = select(lm_df, x1)))
-# lm_df$best_prediction[lm_df$best_prediction < 0] = 0
-# # nse_syca = hydroGOF::NSE(lm_df$best_prediction, lm_df$discharge)
-#
-# plot_data = lm_df
-# first_non_na = Position(function(x) ! is.na(x), plot_data$best_prediction)
-# last_non_na = nrow(plot_data) - Position(function(x) ! is.na(x), rev(plot_data$best_prediction)) + 1
-# plot_data = plot_data[first_non_na:last_non_na, ]
-# plot_data = select(plot_data, -ends_with('_log'), -x1) %>%
-#     select(site_code, datetime, Q_neon_field = discharge, Q_predicted = best_prediction,
-#            everything())
-#
-# best = list()
-# best$score = hydroGOF::NSE(lm_df$best_prediction, lm_df$discharge)
-# best$score_crossval = NA_real_
-# best$fits = NA
-# best$best_model = discharge_log ~ `09510200_log`
-# best$best_model_object = m_piecewise
-# best$prediction = unname(lm_df$best_prediction)
-# best$lm_data = plot_data
-#
-# results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
-#
-# # plot_data = select(lm_df, datetime, Q_predicted = best_prediction, Q_used_in_regression = discharge,
-# #        Q_neon_continuous_filtered = discharge_neon_cont,
-# #        Q_neon_continuous_raw = discharge_neon_orig, Q_neon_manual = discharge_manual_forreals)
-# #
-# # dg = dygraphs::dygraph(xts(x = select(plot_data, -date), order.by = plot_data$date)) %>%
-# #     dyRangeSelector()
-# # saveWidget(dg, glue('../imputation/out/lm_plots/pred/{neon_site}_log.html'))
-#
-# png(glue('../imputation/out/lm_plots/fit/{neon_site}_fit_log.png'), 6, 6, 'in', type = 'cairo', res = 300)
-# plot(lm_df$`09510200_log`, lm_df$discharge_log, xlab = '09510200_log', ylab = 'discharge_log')
-# plot(m_piecewise, add = TRUE, term = 'x1', col = 'red', lwd = 2)
-# dev.off()
-#
-# # results_lm$bestmod_logq[results_lm$site_code == neon_site] = gsub('x1', '09510200_log', paste(as.character(formula(m_piecewise))[c(2, 1, 3)], collapse = ' '))
-# # results_lm$nse_logq[results_lm$site_code == neon_site] = nse_syca
-#
-# # first_non_na = Position(function(x) ! is.na(x), lm_df$best_prediction)
-# # last_non_na = nrow(lm_df) - Position(function(x) ! is.na(x), rev(lm_df$best_prediction)) + 1
-# # lm_df = lm_df[first_non_na:last_non_na, ] %>%
-# #     select(site_code, date,
-# #            discharge_predicted = best_prediction,
-# #            discharge_neon_manual = discharge_manual_forreals,
-# #            discharge_neon_continuous_filtered = discharge_neon_cont,
-# #            discharge_neon_continuous_raw = discharge_neon_orig,
-# #            contains('09510200'))
-# # write_csv(lm_df, glue('../imputation/out/lm_out/by_site/{neon_site}.csv'))
-#
-# class(m_piecewise) = 'lm'
-# png(glue('../imputation/out/lm_plots/diag/{neon_site}_diag_log.png'), 6, 6, 'in', type = 'cairo', res = 300)
-# defpar = par(mfrow=c(2,2))
-# plot(m_piecewise)
-# par(defpar)
-# dev.off()
-
-# WALK ####
-neon_site = 'WALK'; gagenums = donor_gauges[[neon_site]]
-lm_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums)
-mods = generate_nested_formulae(
-    full_spec = as.formula(glue(formulaB)),
-    d = lm_df,
-    min_points_per_param = 15,
-    max_interaction = 3,
-    interactions = TRUE)
-best = eval_model_set(data = lm_df, model_list = mods)
-results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
+regress(neon_site = 'WALK', framework = 'glmnet') #HERE
+regress(neon_site = 'TOMB', framework = '?')
 
 # TOMB ####
 # neon_site = 'TOMB'; gagenums = '02469525'
