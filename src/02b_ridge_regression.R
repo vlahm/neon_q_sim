@@ -15,9 +15,10 @@ library(gridExtra)
 library(neonUtilities)
 library(htmlwidgets)
 library(DAAG)
-library(tidyverse)
 library(macrosheds)
 library(glmnet)
+library(segmented)
+library(tidyverse)
 
 options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
@@ -56,7 +57,7 @@ regress(neon_site = 'BLUE', framework = 'lm')
 regress(neon_site = 'CUPE', framework = 'glmnet') #
 regress(neon_site = 'GUIL', framework = 'glmnet')
 # TECR not yet viable by this approach. requires updated KREW donor gauges
-regress(neon_site = 'SYCA', framework = 'lm')
+# regress(neon_site = 'SYCA', framework = 'segmented')
 
 formulaB <- 'discharge_log ~ `{paste(paste0(gage_ids, "_log"), collapse = "`+`")}` + season'
 neon_site <- 'SYCA'
@@ -66,8 +67,70 @@ lm_df <- assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gage_ids)
 #   very unlikely for one to report >100L/s while the other reports ~15L/s). This measurement also followed a long hiatus.
 lm_df <- filter(lm_df, ! as.Date(datetime) == as.Date('2021-07-26'))
 mods <- generate_nested_formulae(as.formula(glue(formulaB)), lm_df)
-best <- lm_wrap(data = lm_df, model_list = mods)
-results_lm <- plots_and_results(neon_site, best, lm_df, results_lm)
+lm_df$x1 <- lm_df$`09510200_log` #segmented package can't handle variable names with backticks
+m_piecewise <- lm(discharge_log ~ x1 + season, data = lm_df) %>%
+    segmented(seg.Z = ~x1, npsi = 1)
+best <- list()
+best$best_model <- formula(m_piecewise)
+best$best_model_object <- m_piecewise
+best$prediction <- unname(inv_neglog(predict(m_piecewise, newdata = select(lm_df, x1, season))))
+best$prediction[best$prediction < 0] <- 0
+lm_df$prediction <- best$prediction
+
+
+nse_syca = hydroGOF::NSE(lm_df$best_prediction, lm_df$discharge)
+kge_syca = hydroGOF::KGE(lm_df$best_prediction, lm_df$discharge)
+
+plot_data = lm_df
+first_non_na = Position(function(x) ! is.na(x), plot_data$best_prediction)
+last_non_na = nrow(plot_data) - Position(function(x) ! is.na(x), rev(plot_data$best_prediction)) + 1
+plot_data = plot_data[first_non_na:last_non_na, ]
+plot_data = select(plot_data, -ends_with('_log'), -x1) %>%
+    select(site_code, datetime, Q_neon_field = discharge, Q_predicted = best_prediction,
+           everything())
+
+# results_lm = plots_and_results(neon_site, best, lm_df, results_lm)
+
+# plot_data = select(lm_df, datetime, Q_predicted = best_prediction, Q_used_in_regression = discharge,
+#        Q_neon_continuous_filtered = discharge_neon_cont,
+#        Q_neon_continuous_raw = discharge_neon_orig, Q_neon_manual = discharge_manual_forreals)
+#
+# dg = dygraphs::dygraph(xts(x = select(plot_data, -date), order.by = plot_data$date)) %>%
+#     dyRangeSelector()
+# saveWidget(dg, glue('../imputation/out/lm_plots/pred/{neon_site}_log.html'))
+
+png(glue('../imputation/out/lm_plots/fit/{neon_site}_fit_log.png'), 6, 6, 'in', type = 'cairo', res = 300)
+plot(lm_df$`09510200_log`, lm_df$discharge_log, xlab = '09510200_log', ylab = 'discharge_log')
+plot(m_piecewise, add = TRUE, term = 'x1', col = 'red', lwd = 2)
+dev.off()
+
+# results_lm$bestmod_logq[results_lm$site_code == neon_site] = gsub('x1', '09510200_log', paste(as.character(formula(m_piecewise))[c(2, 1, 3)], collapse = ' '))
+# results_lm$nse_logq[results_lm$site_code == neon_site] = nse_syca
+
+# first_non_na = Position(function(x) ! is.na(x), lm_df$best_prediction)
+# last_non_na = nrow(lm_df) - Position(function(x) ! is.na(x), rev(lm_df$best_prediction)) + 1
+# lm_df = lm_df[first_non_na:last_non_na, ] %>%
+#     select(site_code, date,
+#            discharge_predicted = best_prediction,
+#            discharge_neon_manual = discharge_manual_forreals,
+#            discharge_neon_continuous_filtered = discharge_neon_cont,
+#            discharge_neon_continuous_raw = discharge_neon_orig,
+#            contains('09510200'))
+# write_csv(lm_df, glue('../imputation/out/lm_out/by_site/{neon_site}.csv'))
+
+class(m_piecewise) = 'lm'
+png(glue('../imputation/out/lm_plots/diag/{neon_site}_diag_log.png'), 6, 6, 'in', type = 'cairo', res = 300)
+defpar = par(mfrow=c(2,2))
+plot(m_piecewise)
+par(defpar)
+dev.off()
+
+results <- plots_and_results(neon_site, best, lm_df, results)
+results[results$site_code == neon_site, 'method'] <- 'segmented'
+# best <- lm_wrap(data = lm_df, model_list = mods)
+# results_lm <- plots_and_results(neon_site, best, lm_df, results_lm)
+
+# ####
 
 regress(neon_site = 'WALK', framework = 'glmnet') #HERE
 regress(neon_site = 'TOMB', framework = '?')

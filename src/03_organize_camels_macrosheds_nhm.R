@@ -141,6 +141,7 @@ nhm_sites_camels <- read_csv('in/NHMv1/camels_gauge_info_with_segids.csv')
 ## X. recompute CAMELS forcings; build NEON forcings and attributes ####
 
 source('src/lstm_dungeon/recompute_camels_climate.R', local = new.env())
+#HERE: SOURCE SYMMARIZE_NEON_DAYMET. NEED TO ADD PET TO IT
 
 neon_elevations <- read_csv('in/NEON/neon_site_info2.csv') %>%
     select(site_code = field_site_id, elev = field_mean_elevation_m) %>%

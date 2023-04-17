@@ -45,8 +45,19 @@ ensembles <- list(
     HOPB = list(2573:2602),
     # FLNT = list(2603:2632), #wasn't actually using ms NHM for continue, but has legit validation continue tb
     FLNT = list(2633:2662), #PGDL
-    # BLDE = list()  #SPECIALIST
+    #specialists
+    HOPB, #*** can use previous generalist ensemble and tack on some finetunes!
+    WALK, #***
+    MCRA, #***
+    COMO, #***
+    BIGC, #***
+    MART, #***
+
 )
+#SPECIALISTS TO ENSEMBLE:
+BIGC, COMO, MCRA, WALK, HOPB
+#NOT
+blde, mart
 
 # 2. setup (rigamarole) ####
 

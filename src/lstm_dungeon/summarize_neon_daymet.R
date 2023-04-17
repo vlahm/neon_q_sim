@@ -75,13 +75,11 @@ ee_task <- ee$batch$Export$table$toDrive(
     fileNamePrefix = 'rgee'
 )
 
-print('summarizing Daymet layers for NEON watersheds. may take several hours depending on demand.')
+print('summarizing Daymet layers for NEON watersheds. may take hours or even days depending on demand.')
 
 #run job
 ee_task$start()
 ee_monitoring(ee_task, max_attempts = Inf)
-
-feather::read_feather('in/NEON/neon_forcings.feather') ################ just check against this
 
 #retrieve results from google drive
 temp_rgee <- tempfile(fileext = '.csv')
