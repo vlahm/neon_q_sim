@@ -502,7 +502,7 @@ glmnet_wrap <- function(data, full_spec, unscale_q_by_area = TRUE,
         pbias = hydroGOF::pbias(sim, obs)
     )
 
-    ## plot marginal relationships via lm
+    ## plot marginal associations
 
     trms <- rownames(attributes(terms(full_spec))$factors)
     dep <- gsub('`', '', trms[1])
@@ -514,7 +514,6 @@ glmnet_wrap <- function(data, full_spec, unscale_q_by_area = TRUE,
         d2 <- filter(data, ! is.na(discharge_log) & ! is.na(!!sym(site_indeps[i])))
         ggps[[i]] <- ggplot(d2, aes(x = !!sym(site_indeps[i]), y = discharge_log)) +
             geom_point()
-            # stat_smooth(method = "lm", col = "red")
     }
     gd <- do.call("grid.arrange", c(ggps))
     if(plot_marg) plot(gd)
@@ -1140,8 +1139,6 @@ regress <- function(neon_site, framework, ..., scale_q_by_area = TRUE,
                                nearby_usgs_gages = gage_ids,
                                scale_q_by_area = scale_q_by_area)
     } else {
-        # if(any(! grepl('^[0-9]+$|datetime|date', colnames(in_df)))){
-        #     in_df <- assemble_q_df(neon_site = neon_site, ms_Q_data = )
         in_df <- precomputed_df
     }
 
@@ -1289,13 +1286,11 @@ plots_and_results <- function(neon_site, best, results,
 
         seasons_present <- c(seasons_present,
                              min(as.numeric(seasons_present)) - 1)
-        # seasons_present[seasons_present == '0'] <- '4'
 
         newx_ <- select(qall, all_of(site_indeps_log), any_of('season')) %>%
             mutate(season = ifelse(! season %in% seasons_present, NA, season),
                    season = as.factor(season))
         qall$upr <- qall$lwr <- qall$fit <- NA_real_
-        # intcpt_inv <- as.numeric(! attr(terms(best$best_model), 'intercept'))
 
         qall[complete.cases(newx_), c('fit', 'lwr', 'upr')] <- predict(
                 best$best_model_object,
