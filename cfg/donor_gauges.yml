@@ -57,8 +57,6 @@ BLWA:
     - "02465000"
 MCRA:
     - "GSWS01"
-    - "GSWS06"
-    - "GSWS07"
     - "GSWS08"
     - "GSLOOK"
 BIGC:
