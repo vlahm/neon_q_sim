@@ -90,3 +90,35 @@ read_csv(temp_rgee) %>%
 
 #remove remote file if desired
 # googledrive::drive_rm('GEE/rgee.csv')
+
+# part 2 (not necessary if Daymet 2022 is on GEE by now) ####
+
+warning('not running part 2 of summarize_neon_daymet.R, assuming Daymet 2022 is now on GEE')
+
+dir.create('in/CAMELS/daymet2022')
+
+#this is one of the recommended ways to download THREDDS files (https://adc.met.no/node/95).
+#   you can also use download.file, etc.
+#   in the below commands, the following arguments have been added:
+#       `-P in/CAMELS/daymet2022/`
+#       --show-progress
+
+#continental USA (including Alaska)
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_dayl_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_prcp_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_srad_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_swe_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_tmin_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_tmax_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_vp_2022.nc'")
+
+#Puerto Rico
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_dayl_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_prcp_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_srad_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_swe_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_tmin_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_tmax_2022.nc'")
+system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_vp_2022.nc'")
+
+#Hawaii not needed. no NEON sites
