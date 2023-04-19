@@ -85,9 +85,9 @@ for(i in seq_along(site_map)){
             }
         }
 
-        daymet_d$alpha <- raster::crop(a_coef, site_shp) %>%
-            raster::mask(site_shp) %>%
-            raster::values() %>%
+        daymet_d$alpha <- terra::crop(a_coef, site_shp) %>%
+            terra::mask(site_shp) %>%
+            terra::values() %>%
             mean(na.rm = TRUE) %>%
             {. / 100}
 

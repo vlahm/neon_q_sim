@@ -3,7 +3,7 @@
 # last data retrieval dates given in comments below:
 # last edit: 2023-04-12
 
-library(raster)
+library(terra)
 library(tidyverse)
 library(macrosheds)
 library(ncdf4)

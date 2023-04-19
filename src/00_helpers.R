@@ -611,6 +611,7 @@ glmnet_wrap <- function(data, full_spec, unscale_q_by_area = TRUE,
     out <- list(best_model = full_spec,
                 best_model_ignoreint = full_spec_ignoreint,
                 best_model_object = best_model,
+                alpha = alpha,
                 prediction = unname(data$lm),
                 lm_data = plot_data,
                 metrics = metr,
@@ -619,6 +620,43 @@ glmnet_wrap <- function(data, full_spec, unscale_q_by_area = TRUE,
 
     return(out)
 }
+
+bootstrap_ci_glmnet <- function(ncores, in_df, frm, best, has_intcpt, newx_){
+
+    clst_type <- ifelse(.Platform$OS.type == 'windows', 'PSOCK', 'FORK')
+    # ncores <- parallel::detectCores() %/% 4.5
+    clst <- makeCluster(spec = ncores, type = clst_type)
+    registerDoParallel(clst)
+
+    bootstrap_samps <- parallel::parSapply(clst, 1:1000, function(x){
+
+        resamp <- stratified_resample(in_df, 'season')
+        x <- model.matrix(frm, data = resamp)
+        mod_inds <- complete.cases(resamp)
+        y <- resamp$discharge_log[mod_inds]
+
+        s <- cv.glmnet(x, y, alpha = best$alpha, intercept = has_intcpt)$lambda.min
+        m <- glmnet(x, y, alpha = best$alpha, intercept = has_intcpt, lambda = s)
+
+        predict(m, s = s, newx = model.matrix(update(frm, NULL ~ .), newx_))
+    }, simplify = TRUE)
+
+    ci <- parallel::parApply(clst, bootstrap_samps, 1, quantile, probs = c(0.025, 0.975))
+
+    # ci_lwr <- do.call(function(...) Map(function(...) parallel::clusterMap(
+    #     clst, quant025, ..., SIMPLIFY = TRUE, USE.NAMES = FALSE), ...),
+    #     bootstrap_samps)
+    # ci_upr <- do.call(function(...) Map(function(...) parallel::clusterMap(
+    #     clst, quant975, ..., SIMPLIFY = TRUE, USE.NAMES = FALSE), ...),
+    #     bootstrap_samps)
+
+    stopCluster(clst)
+
+    return(list(ci_lwr = ci[1, ], ci_upr = ci[2, ]))
+}
+
+# quant975 <- function(...) quantile(c(...), probs = 0.975)
+# quant025 <- function(...) quantile(c(...), probs = 0.025)
 
 generate_nested_formulae <- function(full_spec, d,
                                      interactions = TRUE, through_origin = TRUE,
@@ -1086,7 +1124,8 @@ segmented_wrap <- function(data, model_list,
 regress <- function(neon_site, framework, ..., scale_q_by_area = TRUE,
                     precomputed_df = NULL, custom_formula = NULL,
                     dummy_break = NULL, custom_gauges = NULL,
-                    no_write = FALSE){
+                    no_write = FALSE, bootstrap_ci = TRUE,
+                    ncores = max(parallel::detectCores() %/% 4, 2)){
 
     #neon_site: 4-letter NEON site code, e.g. "REDB"
     #framework: string. 'lm', 'glmnet', or 'segmented'
@@ -1106,6 +1145,10 @@ regress <- function(neon_site, framework, ..., scale_q_by_area = TRUE,
     #   provided by cft/donor_gauges.yml, e.g. if for building composite models.
     #no_write: logical. if TRUE, do not write to the `results` data.frame in the
     #   global environment, and do not write data or plots via plots_and_results.
+    #bootstrap_ci: logical. should 95% confidence intervals for glmnet models
+    #   be computed? Ignored if framework != 'glmnet'. see ncores.
+    #ncores: integer. number of cores to use for parallel computation of 95%
+    #   confidence intervals
 
     #updates `results` in memory and out/lm_out/results_specificq.csv (unless no_write is TRUE)
     #   if scale_q_by_area is FALSE, writes instead to out/lm_out/results.csv
@@ -1189,9 +1232,14 @@ regress <- function(neon_site, framework, ..., scale_q_by_area = TRUE,
     }
 
     if(! no_write){
-        results <- plots_and_results(neon_site, best, results,
-                                     unscale_q_by_area = scale_q_by_area,
-                                     dummy_break = dummy_break)
+
+        results <- plots_and_results(
+            neon_site, best, results, in_df,
+            unscale_q_by_area = scale_q_by_area,
+            dummy_break = dummy_break,
+            bootstrap_ci = bootstrap_ci,
+            ncores = ncores
+        )
         results[results$site_code == neon_site, 'method'] <- framework
         results <<- results
     }
@@ -1199,9 +1247,9 @@ regress <- function(neon_site, framework, ..., scale_q_by_area = TRUE,
     return(best)
 }
 
-plots_and_results <- function(neon_site, best, results,
+plots_and_results <- function(neon_site, best, results, in_df,
                               return_plot = FALSE, unscale_q_by_area = TRUE,
-                              dummy_break = NULL){
+                              dummy_break = NULL, bootstrap_ci, ncores){
 
     #load corroborating usgs/ms site data
     sites_nearby = read_csv(glue('in/usgs_Q/{neon_site}.csv'))
@@ -1290,26 +1338,38 @@ plots_and_results <- function(neon_site, best, results,
         newx_ <- select(qall, all_of(site_indeps_log), any_of('season')) %>%
             mutate(season = ifelse(! season %in% seasons_present, NA, season),
                    season = as.factor(season))
-        qall$upr <- qall$lwr <- qall$fit <- NA_real_
+        valid_obs <- complete.cases(newx_)
+        frm <- best$best_model_ignoreint
+        has_intcpt <- '(Intercept)' %in% betas
 
-        qall[complete.cases(newx_), c('fit', 'lwr', 'upr')] <- predict(
-                best$best_model_object,
-                s = best$best_model_object$lambda,
-                newx = model.matrix(update(best$best_model_ignoreint, NULL ~ .),
-                                    newx_),
-                type = 'response'
-            ) %>%
-            as_tibble() %>%
-            rename(fit = 1) %>%
-            mutate(lwr = NA_real_, upr = NA_real_, #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!TEMP!!!!!!!!!!!!!!!!!!!!!!
-                   across(everything(), ~ifelse(. < 0, 0, .)),
-                   across(everything(), inv_neglog))
+        pred <- predict(
+            best$best_model_object,
+            s = best$best_model_object$lambda,
+            newx = model.matrix(update(frm, NULL ~ .), newx_),
+            type = 'response'
+        )
+
+        if(bootstrap_ci){
+            cat('Bootstrapping 95% confidence intervals on', ncores, 'cores. Watch your RAM!')
+            ci <- bootstrap_ci_glmnet(ncores, in_df, frm, best, has_intcpt, newx_)
+        } else {
+            ci <- list(ci_lwr = rep(NA_real_, length(pred)),
+                       ci_upr = rep(NA_real_, length(pred)))
+        }
+
+        pred[pred < 0] <- 0
+        ci$ci_lwr[ci$ci_lwr < 0] <- 0
+        ci$ci_upr[ci$ci_upr < 0] <- 0
+
+        qall$upr <- qall$lwr <- qall$fit <- NA_real_
+        qall[valid_obs, 'fit'] <- inv_neglog(pred)
+        qall[valid_obs, 'lwr'] <- inv_neglog(ci$ci_lwr)
+        qall[valid_obs, 'upr'] <- inv_neglog(ci$ci_upr)
 
     } else { #lm
 
         qall <- predict(best$best_model_object,
                         newdata = qall,
-                        # newdata = select(qall, all_of(site_indeps_log), any_of('season')),
                         interval = 'predict') %>%
             as_tibble() %>%
             mutate(across(everything(), ~ifelse(. < 0, 0, .))) %>%
@@ -1452,7 +1512,8 @@ plots_and_results <- function(neon_site, best, results,
 }
 
 plots_and_results_daily_composite <- function(neon_site, best1, best2, results,
-                                              unscale_q_by_area = TRUE){
+                                              unscale_q_by_area = TRUE, in_df,
+                                              bootstrap_ci, ncores){
 
     #best2 and lm_df2 should represent the model with more terms included
 
@@ -1496,23 +1557,6 @@ plots_and_results_daily_composite <- function(neon_site, best1, best2, results,
         filter(! is.na(discharge)) %>%
         rename(discharge_daily = discharge)
 
-    # q_eval = read_csv('in/NEON/neon_q_eval.csv') %>%
-    #     filter(site == neon_site)
-    #
-    # q_eval = q_eval %>%
-    #     group_by(site, year, month) %>%
-    #     summarize(keep = all(final_qual %in% c('Tier1', 'Tier2')), #if issues occur at any point in a month, reject that whole month
-    #               .groups = 'drop')
-    #
-    # neon_q_daily_qc = neon_q_daily %>%
-    #     mutate(year = year(date),
-    #            month = month(date)) %>%
-    #     left_join(select(q_eval, year, month, keep),
-    #               by = c('year', 'month')) %>%
-    #     filter(keep) %>%
-    #     select(-keep, -year, -month) %>%
-    #     rename(discharge_daily_qc = discharge_daily)
-
     #predict Q for all datetimes with predictor data
 
     qall = left_join(sites_nearby, neon_q_daily, by = 'date')
@@ -1553,19 +1597,33 @@ plots_and_results_daily_composite <- function(neon_site, best1, best2, results,
         newx_ <- select(qall, all_of(site_indeps_log1), any_of('season')) %>%
             mutate(season = ifelse(! season %in% seasons_present, NA, season),
                    season = as.factor(season))
+        valid_obs <- complete.cases(newx_)
+        frm <- best1$best_model_ignoreint
+        has_intcpt <- '(Intercept)' %in% betas
 
-        qall1[complete.cases(newx_), c('fit', 'lwr', 'upr')] <- predict(
+        pred1 <- predict(
             best1$best_model_object,
             s = best1$best_model_object$lambda,
-            newx = model.matrix(update(best1$best_model_ignoreint, NULL ~ .),
-                                newx_),
+            newx = model.matrix(update(frm, NULL ~ .), newx_),
             type = 'response'
-        ) %>%
-            as_tibble() %>%
-            rename(fit = 1) %>%
-            mutate(lwr = NA_real_, upr = NA_real_, #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!TEMP!!!!!!!!!!!!!!!!!!!!!!
-                   across(everything(), ~ifelse(. < 0, 0, .)),
-                   across(everything(), inv_neglog))
+        )
+
+        if(bootstrap_ci){
+            cat('Bootstrapping 95% confidence intervals on', ncores, 'cores. Watch your RAM!')
+            ci <- bootstrap_ci_glmnet(ncores, in_df, frm, best1, has_intcpt, newx_)
+        } else {
+            ci <- list(ci_lwr = rep(NA_real_, length(pred1)),
+                       ci_upr = rep(NA_real_, length(pred1)))
+        }
+
+        pred1[pred1 < 0] <- 0
+        ci$ci_lwr[ci$ci_lwr < 0] <- 0
+        ci$ci_upr[ci$ci_upr < 0] <- 0
+
+        qall1$upr <- qall1$lwr <- qall1$fit <- NA_real_
+        qall1[valid_obs, 'fit'] <- inv_neglog(pred1)
+        qall1[valid_obs, 'lwr'] <- inv_neglog(ci$ci_lwr)
+        qall1[valid_obs, 'upr'] <- inv_neglog(ci$ci_upr)
 
         #mod2
         betas <- best2$best_model_object$beta@Dimnames[[1]]
@@ -1580,19 +1638,33 @@ plots_and_results_daily_composite <- function(neon_site, best1, best2, results,
         newx_ <- select(qall, all_of(site_indeps_log2), any_of('season')) %>%
             mutate(season = ifelse(! season %in% seasons_present, NA, season),
                    season = as.factor(season))
+        valid_obs <- complete.cases(newx_)
+        frm <- best2$best_model_ignoreint
+        has_intcpt <- '(Intercept)' %in% betas
 
-        qall2[complete.cases(newx_), c('fit', 'lwr', 'upr')] <- predict(
+        pred2 <- predict(
             best2$best_model_object,
             s = best2$best_model_object$lambda,
-            newx = model.matrix(update(best2$best_model_ignoreint, NULL ~ .),
-                                newx_),
+            newx = model.matrix(update(frm, NULL ~ .), newx_),
             type = 'response'
-        ) %>%
-            as_tibble() %>%
-            rename(fit = 1) %>%
-            mutate(lwr = NA_real_, upr = NA_real_, #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!TEMP!!!!!!!!!!!!!!!!!!!!!!
-                   across(everything(), ~ifelse(. < 0, 0, .)),
-                   across(everything(), inv_neglog))
+        )
+
+        if(bootstrap_ci){
+            cat('Bootstrapping 95% confidence intervals on', ncores, 'cores. Watch your RAM!')
+            ci <- bootstrap_ci_glmnet(ncores, in_df, frm, best2, has_intcpt, newx_)
+        } else {
+            ci <- list(ci_lwr = rep(NA_real_, length(pred2)),
+                       ci_upr = rep(NA_real_, length(pred2)))
+        }
+
+        pred2[pred2 < 0] <- 0
+        ci$ci_lwr[ci$ci_lwr < 0] <- 0
+        ci$ci_upr[ci$ci_upr < 0] <- 0
+
+        qall2$upr <- qall2$lwr <- qall2$fit <- NA_real_
+        qall2[valid_obs, 'fit'] <- inv_neglog(pred2)
+        qall2[valid_obs, 'lwr'] <- inv_neglog(ci$ci_lwr)
+        qall2[valid_obs, 'upr'] <- inv_neglog(ci$ci_upr)
 
     } else stop('this function only specified for lm and glmnet models')
 
@@ -1737,6 +1809,15 @@ plots_and_results_daily_composite <- function(neon_site, best1, best2, results,
     }
 
     return(results)
+}
+
+stratified_resample <- function(df, factor){
+
+    indices <- split(seq_len(nrow(df)), df[[factor]])
+    resampled_indices <- lapply(indices, sample, replace = TRUE)
+    resampled_indices <- unlist(resampled_indices)
+
+    return(df[resampled_indices,])
 }
 
 # random forest regression ####
