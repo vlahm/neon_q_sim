@@ -88,89 +88,95 @@ read_csv(temp_rgee) %>%
     select(date, site_code, dayl, prcp, srad, swe, tmax, tmin, vp) %>%
     write_csv('in/NEON/neon_forcings.csv')
 
-#remove remote file if desired
-# googledrive::drive_rm('GEE/rgee.csv')
+#remove remote file
+googledrive::drive_rm('GEE/rgee.csv')
 
 # part 2 (not necessary if Daymet 2022 is on GEE by now) ####
 
 warning('not running part 2 of summarize_neon_daymet.R, assuming Daymet 2022 is now on GEE')
+do_not_run_the_following <- TRUE
 
-dir.create('in/CAMELS/daymet2022')
+if(! do_not_run_the_following){
 
-#this is one of the recommended ways to download THREDDS files (https://adc.met.no/node/95).
-#   you can also use download.file, etc.
-#   in the below commands, the following arguments have been added:
-#       `-P in/CAMELS/daymet2022/`
-#
+    dir.create('in/CAMELS/daymet2022')
 
-#continental USA (including Alaska)
-# system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_dayl_2022.nc'")
-# system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_prcp_2022.nc'")
-# system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_srad_2022.nc'")
-# system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_swe_2022.nc'")
-system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_tmin_2022.nc'")
-system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_tmax_2022.nc'")
-system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_vp_2022.nc'")
+    #wget is one of the recommended ways to download THREDDS files (https://adc.met.no/node/95),
+    #   but i think it's unix-like only? you can also use curl, download.file, etc.
+    #   in the below commands, the following argument has been added:
+    #       `-P in/CAMELS/daymet2022/`
 
-#Puerto Rico
-# system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_dayl_2022.nc'")
-system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_prcp_2022.nc'")
-system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_srad_2022.nc'")
-system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_swe_2022.nc'")
-system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_tmin_2022.nc'")
-system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_tmax_2022.nc'")
-system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_vp_2022.nc'")
+    #continental USA (including Alaska)
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_dayl_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_prcp_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_srad_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_swe_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_tmin_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_tmax_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_na_vp_2022.nc'")
 
-#Hawaii not needed. no NEON sites
+    #Puerto Rico
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_dayl_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_prcp_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_srad_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_swe_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_tmin_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_tmax_2022.nc'")
+    system("wget -e robots=off -nH --cut-dirs 4 -nc -r -l5 -A '*.nc' -R 'catalog*' -P in/CAMELS/daymet2022/ -I /thredds/fileServer/,/thredds/catalog/ 'https://thredds.daac.ornl.gov/thredds/catalog/ornldaac/2129/catalog.html?dataset=2129/daymet_v4_daily_pr_vp_2022.nc'")
 
-# library(raster)
-library(terra)
-library(doFuture)
-registerDoFuture()
+    #Hawaii not needed. no NEON sites
 
-ncores <- future::availableCores()
-# read_csv('in/NEON/neon_forcings.csv')
 
-dir.create('log', showWarnings = FALSE)
-logfile <- 'log/daymet2022.log'
+    library(terra)
+    library(doFuture)
+    registerDoFuture()
 
-neon_sheds <- st_read('in/NEON/NEONAquaticWatershed/NEON_Aquatic_Watershed.shp') %>%
-    filter(SiteID %in% !!neon_sites)
-dayf <- list.files('in/CAMELS/daymet2022')
+    ncores <- future::availableCores()
 
-daymet_2022 <- foreach(
-    # df = dayf[1],
-    df = dayf,
-    .combine = function(x, y) left_join(x, y, by = c('date', 'site_code'))) %do% {
+    dir.create('log', showWarnings = FALSE)
+    logfile <- 'log/daymet2022.log'
 
-    var <- str_extract(df, '([a-z]+)_2022\\.nc$', 1)
-    rst <- terra::rast(glue('in/CAMELS/daymet2022/daymet_v4_daily_na_{var}_2022.nc'))
-    rst_pr <- terra::rast(glue('in/CAMELS/daymet2022/daymet_v4_daily_pr_{var}_2022.nc'))
+    neon_sheds <- st_read('in/NEON/NEONAquaticWatershed/NEON_Aquatic_Watershed.shp') %>%
+        filter(SiteID %in% !!neon_sites)
+    dayf <- list.files('in/CAMELS/daymet2022') %>%
+        str_subset('daily_na')
 
-    var_d <- foreach(
-        i = seq_len(nrow(neon_sheds)),
-        .combine = bind_rows) %dopar% {
+    daymet_2022 <- foreach(
+        df = dayf,
+        .combine = function(x, y) left_join(x, y, by = c('date', 'site_code'))) %do% {
 
-        shed_i <- neon_sheds[i, ]
-        site <- shed_i$SiteID
+        var <- str_extract(df, '([a-z]+)_2022\\.nc$', 1)
+        rst <- terra::rast(glue('in/CAMELS/daymet2022/daymet_v4_daily_na_{var}_2022.nc'))
+        rst_pr <- terra::rast(glue('in/CAMELS/daymet2022/daymet_v4_daily_pr_{var}_2022.nc'))
 
-        if(site %in% c('CUPE', 'GUIL')){
-            var_d_ <- terra::extract(rst_pr, shed_i, mean, ID = FALSE)
-        } else {
-            var_d_ <- terra::extract(rst, shed_i, mean, ID = FALSE)
+        var_d <- foreach(
+            i = seq_len(nrow(neon_sheds)),
+            .combine = bind_rows) %dopar% {
+
+            shed_i <- neon_sheds[i, ]
+            site <- shed_i$SiteID
+
+            if(site %in% c('CUPE', 'GUIL')){
+                var_d_ <- terra::extract(rst_pr, shed_i, mean, ID = FALSE)
+            } else {
+                var_d_ <- terra::extract(rst, shed_i, mean, ID = FALSE)
+            }
+
+            var_d_ <- tibble(date = names(var_d_),
+                            !!var := unlist(var_d_, use.names = FALSE)) %>%
+                mutate(date = paste('2022', str_extract(date, '[0-9]+$')),
+                       date = as.POSIXct(date, format = '%Y %j'),
+                       site_code = site)
+
+            write_lines(paste(var, site, '[done]'), logfile, append = TRUE)
+
+            return(var_d_)
         }
 
-        var_d_ <- tibble(date = names(var_d_),
-                        !!var := unlist(var_d_, use.names = FALSE)) %>%
-            mutate(date = paste('2022', str_extract(date, '[0-9]+$')),
-                   date = as.POSIXct(date, format = '%Y %j'),
-                   site_code = site)
-
-        write_lines(paste(var, site, '[done]'), logfile, append = TRUE)
-
-        return(var_d_)
+        return(var_d)
     }
 
-    return(var_d)
+    read_csv('in/NEON/neon_forcings.csv') %>%
+        bind_rows(daymet_2022) %>%
+        arrange(site_code, date) %>%
+        write_csv('in/NEON/neon_forcings.csv')
 }
-

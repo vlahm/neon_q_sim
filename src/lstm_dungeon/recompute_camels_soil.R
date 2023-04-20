@@ -307,29 +307,16 @@ catch <- foreach(i = seq_along(sites)) %dopar% {
 
 parallel::stopCluster(clst)
 
-all_soil <- list.files('in/CAMELS/recomputed_attributes/soil',
-                       full.names = TRUE) %>%
+list.files('in/CAMELS/recomputed_attributes/soil', full.names = TRUE) %>%
     map_dfr(read_csv) %>%
     filter(! var %in% c('soil_cat_exchange_7', 'soil_ph')) %>%
     mutate(n = nchar(site_code)) %>%
     mutate(site_code = ifelse(n == 7, paste0(0, site_code), site_code)) %>%
-    select(-n, -year)
-
-write_csv(all_soil, 'in/CAMELS/recomputed_attributes/soil.csv')
-
-HERE. FIGURE OUT WHICH SOIL.FEATHER IS IN USE AND ONLY WRITE THAT ONE
-#is this supposed to be the same file as the line above?
-camels_soil <- read_feather('neon_camels_attr/data/large/camels_soil/soil.feather')
-camels_soil <- all_soil
-
-camels_soil <- camels_soil %>%
-    select(-pctCellErr) %>%
+    select(-n, -year, -pctCellErr) %>%
     filter(var %in% c('soil_org', 'soil_sand', 'soil_silt', 'soil_clay')) %>%
     pivot_wider(names_from = 'var', values_from = 'val') %>%
     rename(sand_frac = soil_sand,
            silt_frac = soil_silt,
            clay_frac = soil_clay,
-           organic_frac = soil_org)
-
-dir.create('neon_camels_attr/data/ms_attributes/camels/')
-write_feather(camels_soil, 'neon_camels_attr/data/ms_attributes/camels/soil.feather')
+           organic_frac = soil_org) %>%
+    write_csv('in/CAMELS/recomputed_attributes/soil.csv')

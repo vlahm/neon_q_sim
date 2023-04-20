@@ -27,14 +27,15 @@ param_search <- list(generalist = list(1468:1507, #batch 1
                                        1748:1937), #batch 2
                      # specialist = list(2293:2307, #batch 1
                      #                   2308:2422), #batch 2
-                     pgdl = list(2028:2117)) #but also 1628:1657! just didn't find anything good there i guess
-#anyway the solution must be to include SOME or NO search runs?
+                     pgdl = list(2028:2117)) #also 1628:1657
 
-#just for plotting. any sets that perform well in this stage get full ensembles
-mini_ensembles <- list(specialist = list(), #list(2293:2307, 2308:2397),
+#just for more accurate plotting. any models that perform well get full ensembles
+mini_ensembles <- list(specialist = list(2663:2792), #list(2293:2307, 2308:2397),
                        pgdl = list(2248:2292))
 
 ensembles <- list(
+
+    #generalists
     TECR = list(2423:2452),
     BIGC = list(2453:2482),
     MART = list(2453:2482), #same ensemble as BIGC
@@ -43,21 +44,20 @@ ensembles <- list(
     MCRA = list(2513:2542), #
     COMO = list(2543:2572),
     HOPB = list(2573:2602),
-    # FLNT = list(2603:2632), #wasn't actually using ms NHM for continue, but has legit validation continue tb
-    FLNT = list(2633:2662), #PGDL
-    #specialists
-    HOPB, #*** can use previous generalist ensemble and tack on some finetunes!
-    WALK, #***
-    MCRA, #***
-    COMO, #***
-    BIGC, #***
-    MART, #***
 
+    #PGDL specialist
+    # FLNT = list(2603:2632), #wasn't actually using ms NHM for continue, but has legit validation continue tb
+    FLNT = list(2633:2662),
+
+    #specialists
+    # HOPB = list(2793:2822), #used wrong hyperparams, but interesting results
+    HOPB = list(2823:2852),
+    WALK = list(2853:2882),
+    MCRA = list(2883:2912),
+    COMO = list(2913:2942),
+    BIGC = list(2943:2972),
+    MART = list(2973:3002)
 )
-#SPECIALISTS TO ENSEMBLE:
-BIGC, COMO, MCRA, WALK, HOPB
-#NOT
-blde, mart
 
 # 2. setup (rigamarole) ####
 
@@ -87,7 +87,8 @@ dir.create('figs/lstm_plots', showWarnings = FALSE)
 dir.create('figs/lstm_plots/pred', showWarnings = FALSE)
 dir.create('figs/lstm_plots/val', showWarnings = FALSE)
 
-#field Q measured after this date is in the holdout set
+#field Q measured after this date is in the holdout set.
+#after training, Daymet 2022 came out, so we used it to extend the holdout set
 holdout_cutuff <- as.Date('2019-12-31')
 
 # 3. run LSTMs parameter searches (each may take several days!) ####
@@ -179,6 +180,12 @@ for(i in seq_along(ensembles)){
         arrange(date)
     pred_q_filt <- pred_q[[neon_site]] %>%
         filter(! is.na(datetime))
+
+    plot(pred_q_filt$datetime, pred_q_filt$mean_run, type = 'l')
+    points(pred_q_filt$datetime, pred_q_filt$discharge_manual)
+    points(pred_q_filt$datetime[pred_q_filt$date > holdout_cutuff],
+           pred_q_filt$discharge_manual[pred_q_filt$date > holdout_cutuff],
+           col = 'red')
 
     metrics[i, 1] <- hydroGOF::NSE(sim = pred_q_filt$mean_run[pred_q_filt$date > holdout_cutuff],
                                    obs = pred_q_filt$discharge_manual[pred_q_filt$date > holdout_cutuff])

@@ -1,7 +1,7 @@
 # Mike Vlah
 # vlahm13@gmail.com
 # last data retrieval dates given in comments below:
-# last edit: 2023-04-17
+# last edit: 2023-04-19
 
 library(dataRetrieval)
 library(data.table)
@@ -38,10 +38,17 @@ results <- tibble(
     site_code = neon_sites, method = NA, nse = NA, nse_cv = NA, kge = NA,
     kge_cv = NA, pbias = NA, pbias_cv = NA, bestmod = NA, adj_r_squared = NA
 )
+# results <- read_csv('out/lm_out/results_specificq.csv')
 
 ## 2. OLS (lm), piecewise (segmented, or ridge (glmnet) regression on specific discharge ####
 
 ## "standard" scenarios
+
+#WARNING: if you're on a unix-like machine, fork clusters will be created.
+#these can be unstable when Rstudio is involved, so watch for memory leaks.
+#i encountered a few by running glmnet models piecemeal. if you run this whole
+#script at once, rather than going through line by line, you should be okay.
+#you can also grep 00_helpers.R for clst_type and hard-code it to "PSOCK"
 
 regress(neon_site = 'REDB', framework = 'lm')
 regress(neon_site = 'HOPB', framework = 'lm')
@@ -55,14 +62,14 @@ regress(neon_site = 'ARIK', framework = 'glmnet')
 regress(neon_site = 'MCDI', framework = 'glmnet')
 regress(neon_site = 'LEWI', framework = 'glmnet')
 regress(neon_site = 'PRIN', framework = 'glmnet', bootstrap_ci = FALSE)
-regress(neon_site = 'POSE', framework = 'glmnet')
+regress(neon_site = 'POSE', framework = 'glmnet', ncores = 11)
 regress(neon_site = 'BLDE', framework = 'glmnet')
 regress(neon_site = 'BLWA', framework = 'glmnet')
 regress(neon_site = 'MAYF', framework = 'glmnet')
 regress(neon_site = 'OKSR', framework = 'glmnet', bootstrap_ci = FALSE)
 regress(neon_site = 'CARI', framework = 'glmnet')
 regress(neon_site = 'FLNT', framework = 'glmnet')
-regress(neon_site = 'MART', framework = 'glmnet')
+regress(neon_site = 'MART', framework = 'glmnet', ncores = 11)
 # TECR not yet viable. requires updated KREW donor gauges
 # BIGC not yet viable. requires updated KREW donor gauges
 # WLOU not yet viable. poor prediction and donor gauges missing seasons
@@ -94,7 +101,7 @@ mcra_d_ <- read_csv('in/hjandrews_q.txt') %>%
     pivot_wider(names_from = SITECODE, values_from = INST_Q) %>%
     arrange(datetime)
 mcra_d <- assemble_q_df(neon_site = 'MCRA', ms_Q_data = mcra_d_)
-regress(neon_site = 'MCRA', framework = 'glmnet', precomputed_df = mcra_d)
+regress(neon_site = 'MCRA', framework = 'glmnet', precomputed_df = mcra_d, ncores = 9)
 
 #COMO: uses MacroSheds data and composite glmnet model
 neon_site <- 'COMO'
@@ -131,10 +138,12 @@ results <- plots_and_results_daily_composite(
     neon_site = neon_site,
     best1 = como_best1,
     best2 = como_best2, #best2 must be the case with more gauges included
-    results = results
+    results = results,
+    in_df1 = como_d1, in_df2 = como_d2, bootstrap_ci = TRUE, ncores = 16
 )
 
 results$method[results$site_code == 'COMO'] <- 'glmnet composite'
+write_csv(results, 'out/lm_out/results_specificq.csv')
 
 
 ## 3. the same, but on absolute discharge ####
@@ -147,8 +156,15 @@ results <- tibble(
     site_code = neon_sites, method = NA, nse = NA, nse_cv = NA, kge = NA,
     kge_cv = NA, pbias = NA, pbias_cv = NA, bestmod = NA, adj_r_squared = NA
 )
+# results <- read_csv('out/lm_out/results.csv')
 
 ## "standard" scenarios
+
+#WARNING: if you're on a unix-like machine, fork clusters will be created.
+#these can be unstable when Rstudio is involved, so watch for memory leaks.
+#i encountered a few by running glmnet models piecemeal. if you run this whole
+#script at once, rather than going through line by line, you should be okay.
+#you can also grep 00_helpers.R for clst_type and hard-code it to "PSOCK"
 
 regress(neon_site = 'REDB', framework = 'lm', scale_q_by_area = FALSE)
 regress(neon_site = 'HOPB', framework = 'lm', scale_q_by_area = FALSE)
@@ -162,14 +178,14 @@ regress(neon_site = 'ARIK', framework = 'glmnet', scale_q_by_area = FALSE)
 regress(neon_site = 'MCDI', framework = 'glmnet', scale_q_by_area = FALSE)
 regress(neon_site = 'LEWI', framework = 'glmnet', scale_q_by_area = FALSE)
 regress(neon_site = 'PRIN', framework = 'glmnet', scale_q_by_area = FALSE, bootstrap_ci = FALSE)
-regress(neon_site = 'POSE', framework = 'glmnet', scale_q_by_area = FALSE)
+regress(neon_site = 'POSE', framework = 'glmnet', scale_q_by_area = FALSE, ncores = 11)
 regress(neon_site = 'BLDE', framework = 'glmnet', scale_q_by_area = FALSE)
 regress(neon_site = 'BLWA', framework = 'glmnet', scale_q_by_area = FALSE)
 regress(neon_site = 'MAYF', framework = 'glmnet', scale_q_by_area = FALSE)
 regress(neon_site = 'OKSR', framework = 'glmnet', scale_q_by_area = FALSE, bootstrap_ci = FALSE)
 regress(neon_site = 'CARI', framework = 'glmnet', scale_q_by_area = FALSE)
 regress(neon_site = 'FLNT', framework = 'glmnet', scale_q_by_area = FALSE)
-regress(neon_site = 'MART', framework = 'glmnet', scale_q_by_area = FALSE)
+regress(neon_site = 'MART', framework = 'glmnet', scale_q_by_area = FALSE, ncores = 10)
 # TECR not yet viable. requires updated KREW donor gauges
 # BIGC not yet viable. requires updated KREW donor gauges
 # WLOU not yet viable. poor prediction and donor gauges missing seasons
@@ -182,7 +198,8 @@ regress(neon_site = 'MART', framework = 'glmnet', scale_q_by_area = FALSE)
 syca_d <- assemble_q_df(neon_site = 'SYCA', scale_q_by_area = FALSE,
                         nearby_usgs_gages = donor_gauges[['SYCA']]) %>%
     filter(! as.Date(datetime) == as.Date('2021-07-26'))
-regress(neon_site = 'SYCA', framework = 'segmented', precomputed_df = syca_d,
+regress(neon_site = 'SYCA', framework = 'lm', precomputed_df = syca_d,
+# regress(neon_site = 'SYCA', framework = 'segmented', precomputed_df = syca_d, # ! can't fit segmented model on absolute Q
         scale_q_by_area = FALSE)
 
 #LECO: a wildfire in 2016 changed the intercept!
@@ -205,7 +222,7 @@ mcra_d_ <- read_csv('in/hjandrews_q.txt') %>%
     arrange(datetime)
 mcra_d <- assemble_q_df(neon_site = 'MCRA', ms_Q_data = mcra_d_, scale_q_by_area = FALSE)
 regress(neon_site = 'MCRA', framework = 'glmnet', precomputed_df = mcra_d,
-        scale_q_by_area = FALSE)
+        scale_q_by_area = FALSE, ncores = 9)
 
 #COMO: uses MacroSheds data and composite glmnet model
 neon_site <- 'COMO'
@@ -245,36 +262,9 @@ results <- plots_and_results_daily_composite(
     best1 = como_best1,
     best2 = como_best2, #best2 must be the case with more gauges included
     results = results,
-    unscale_q_by_area = FALSE
+    unscale_q_by_area = FALSE,
+    in_df1 = como_d1, in_df2 = como_d2, bootstrap_ci = TRUE, ncores = 16
 )
 
 results$method[results$site_code == 'COMO'] <- 'glmnet composite'
-
-## 4. random forest regression (abandoned; poor predictions, esp. out of Q sample range) ####
-
-# library(caret)
-# library(ranger)
-
-# # REDB
-# neon_site = 'REDB'; gagenums = '10172200'
-# rf_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
-# rf_df = select(rf_df, -ends_with('_log')) %>% rename_with(~paste0('x', .), matches('^[0-9]+$'))
-# gagenums = paste0('x', gagenums)
-# best = eval_model_set_rf(data = rf_df)
-# plots_and_results_rf(neon_site, best, rf_df, results_rf)
-#
-# # KING
-# neon_site = 'KING'; gagenums = c('06879650', '06879810', '06879100', '06878600');
-# rf_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
-# rf_df = select(rf_df, -ends_with('_log')) %>% rename_with(~paste0('x', .), matches('^[0-9]+$'))
-# gagenums = paste0('x', gagenums)
-# best = eval_model_set_rf(data = rf_df)
-# plots_and_results_rf(neon_site, best, rf_df, results_rf)
-#
-# # GUIL
-# neon_site = 'GUIL'; gagenums = c('50028000', '50024950', '50126150', '50026025')
-# rf_df = assemble_q_df(neon_site = neon_site, nearby_usgs_gages = gagenums, scale_q_by_area = FALSE)
-# rf_df = select(rf_df, -ends_with('_log')) %>% rename_with(~paste0('x', .), matches('^[0-9]+$'))
-# gagenums = paste0('x', gagenums)
-# best = eval_model_set_rf(data = rf_df)
-# plots_and_results_rf(neon_site, best, rf_df, results_rf)
+write_csv(results, 'out/lm_out/results.csv')

@@ -516,7 +516,7 @@ glmnet_wrap <- function(data, full_spec, unscale_q_by_area = TRUE,
             geom_point()
     }
     gd <- do.call("grid.arrange", c(ggps))
-    if(plot_marg) plot(gd)
+    if(plot_marg) print(gd)
 
     ## handle novel seasonal factor values
 
@@ -856,7 +856,7 @@ lm_wrap <- function(data, model_list,
         }
     }
     gd = do.call("grid.arrange", c(ggps))
-    # print(gd)
+    print(gd)
 
     newdata = select(data, all_of(indeps))
 
@@ -1034,7 +1034,7 @@ segmented_wrap <- function(data, model_list,
             geom_point()
     }
     gd = do.call("grid.arrange", c(ggps))
-    # print(gd)
+    print(gd)
 
     newdata = select(data, all_of(indeps)) %>%
         rename_with(~sub('`?([0-9]{2,}_log)`?', 'x\\1', .))
@@ -1242,6 +1242,12 @@ regress <- function(neon_site, framework, ..., scale_q_by_area = TRUE,
         )
         results[results$site_code == neon_site, 'method'] <- framework
         results <<- results
+
+        if(scale_q_by_area){
+            write_csv(results, 'out/lm_out/results_specificq.csv')
+        } else {
+            write_csv(results, 'out/lm_out/results.csv')
+        }
     }
 
     return(best)
@@ -1512,8 +1518,8 @@ plots_and_results <- function(neon_site, best, results, in_df,
 }
 
 plots_and_results_daily_composite <- function(neon_site, best1, best2, results,
-                                              unscale_q_by_area = TRUE, in_df,
-                                              bootstrap_ci, ncores){
+                                              unscale_q_by_area = TRUE, in_df1,
+                                              in_df2, bootstrap_ci, ncores){
 
     #best2 and lm_df2 should represent the model with more terms included
 
@@ -1610,7 +1616,7 @@ plots_and_results_daily_composite <- function(neon_site, best1, best2, results,
 
         if(bootstrap_ci){
             cat('Bootstrapping 95% confidence intervals on', ncores, 'cores. Watch your RAM!')
-            ci <- bootstrap_ci_glmnet(ncores, in_df, frm, best1, has_intcpt, newx_)
+            ci <- bootstrap_ci_glmnet(ncores, in_df1, frm, best1, has_intcpt, newx_)
         } else {
             ci <- list(ci_lwr = rep(NA_real_, length(pred1)),
                        ci_upr = rep(NA_real_, length(pred1)))
@@ -1651,7 +1657,7 @@ plots_and_results_daily_composite <- function(neon_site, best1, best2, results,
 
         if(bootstrap_ci){
             cat('Bootstrapping 95% confidence intervals on', ncores, 'cores. Watch your RAM!')
-            ci <- bootstrap_ci_glmnet(ncores, in_df, frm, best2, has_intcpt, newx_)
+            ci <- bootstrap_ci_glmnet(ncores, in_df2, frm, best2, has_intcpt, newx_)
         } else {
             ci <- list(ci_lwr = rep(NA_real_, length(pred2)),
                        ci_upr = rep(NA_real_, length(pred2)))

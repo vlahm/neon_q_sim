@@ -1,7 +1,7 @@
 # Mike Vlah
 # vlahm13@gmail.com
 # last data retrieval dates given in comments below:
-# last edit: 2023-04-12
+# last edit: 2023-04-19
 
 library(terra)
 library(tidyverse)
@@ -9,8 +9,9 @@ library(macrosheds)
 library(ncdf4)
 library(lubridate)
 library(imputeTS)
-library(foreach)
-library(doParallel)
+# library(foreach)
+# library(doParallel)
+library(doFuture)
 library(glue)
 library(sf)
 library(soilDB)
@@ -138,16 +139,18 @@ nhm_sites_ms <- read_csv('in/NHMv1/sites_with_segids.csv')
 nhm_sites_camels <- read_csv('in/NHMv1/camels_gauge_info_with_segids.csv')
 
 
-## X. recompute CAMELS forcings; build NEON forcings and attributes ####
+## 2. recompute CAMELS forcings; build NEON forcings and attributes ####
 
+source('src/lstm_dungeon/summarize_neon_daymet.R', local = new.env())
+source('src/lstm_dungeon/summarize_neon_pet.R', local = new.env())
 source('src/lstm_dungeon/recompute_camels_climate.R', local = new.env())
-#HERE: SOURCE SYMMARIZE_NEON_DAYMET. NEED TO ADD PET TO IT
+source('src/lstm_dungeon/recompute_camels_soil.R', local = new.env())
+#summarizing of additional gridded data for NEON
+#(vegetation, topography, geology, land use, etc.)
+#not shown here, but will be included in next version of MacroSheds dataset
+#eary 2024. Contact us if you'd like to see that code now.
 
-neon_elevations <- read_csv('in/NEON/neon_site_info2.csv') %>%
-    select(site_code = field_site_id, elev = field_mean_elevation_m) %>%
-    filter(site_code %in% neon_sites)
-
-## 2. prepare MacroSheds static attributes; write CSV ####
+## 3. prepare MacroSheds static attributes; write CSV ####
 
 ms_attr_static <- read_csv('in/NEON/neon_attrs.csv') %>%
     mutate(domain = 'neon') %>%
@@ -173,7 +176,7 @@ suppressWarnings(file.remove('in/lstm_data/attributes/ms_attributes.csv'))
 write_csv(ms_attr_static, 'in/lstm_data/attributes/ms_attributes.csv')
 
 
-## 3. prepare CAMELS static attributes; write CSV ####
+## 4. prepare CAMELS static attributes; write CSV ####
 
 camels_clim <- read_delim('in/CAMELS/camels_attributes_v2.0/camels_clim.txt',
                           col_types = 'cnnnnnnncnnc', delim = ';')
@@ -219,8 +222,7 @@ camels_attr_static <- camels_attr_static %>%
 
 write_csv(camels_attr_static, 'in/lstm_data/attributes/camels_attributes.csv')
 
-
-## 4. prepare MacroSheds/NEON discharge ####
+## 5. prepare MacroSheds/NEON discharge ####
 
 neon_q <- map_dfr(list.files('in/NEON/neon_continuous_Q', full.names = TRUE),
                   function(x){
@@ -300,7 +302,7 @@ ms_q <- ms_q %>%
     mutate(discharge = discharge * 0.001 * 1e-4 * 1000 * 86400 / ws_area_ha) %>%
     select(-ws_area_ha)
 
-## 5. prepare MacroSheds/NEON forcings ####
+## 6. prepare MacroSheds/NEON forcings ####
 
 ms_attr_dyn <- read_csv('in/NEON/neon_forcings.csv') %>%
     mutate(domain = 'neon') %>%
@@ -321,10 +323,22 @@ ms_attr_dyn <- ms_attr_dyn %>%
     select(-domain, -network)
 
 
-## 6. merge MacroSheds discharge and forcings; write NetCDFs ####
+## 7. merge MacroSheds discharge and forcings; write NetCDFs ####
+
+dd <- ms_attr_dyn
 
 ms_attr_dyn <- semi_join(ms_attr_dyn, ms_q, by = 'site_code')
 ms_q <- semi_join(ms_q, ms_attr_dyn, by = 'site_code')
+
+#extend each neon series to account for field Q overhang
+for(ns in neon_sites){
+    last_date <- max(ms_q$date[ms_q$site_code == ns])
+    ms_q <- tibble(date = seq(last_date + 1, as.Date('2022-12-31'), by = 'day')) %>%
+        mutate(site_code = ns, discharge = NA_real_) %>%
+        bind_rows(ms_q)
+}
+ms_q <- select(ms_q, site_code, date, discharge) %>%
+    arrange(site_code, date)
 
 ms_attr_dyn$date <- as.double(as.Date(ms_attr_dyn$date))
 ms_q$date <- as.double(ms_q$date) #numeric dates required for NetCDF format
@@ -398,7 +412,7 @@ ms_write_netcdf(df_list = ms_attr_dyn,
                 path = 'in/lstm_data/time_series')
 
 
-## 7. prepare NHM estimates for MacroSheds sites; write NetCDFs ####
+## 8. prepare NHM estimates for MacroSheds sites; write NetCDFs ####
 
 nhm_ms_ts_splt <- list()
 for(i in 1:nrow(nhm_sites_ms)){
@@ -418,7 +432,7 @@ for(i in 1:nrow(nhm_sites_ms)){
         #      mm/d            ft^3/s          m^3/ft^3    ha/m^2 mm/m   s/d     ha
         mutate(discharge_nhm = discharge_nhm * 0.0283168 * 1e-4 * 1000 * 86400 / !!ws_area_ha)
 
-    nhm_ms_ts_part <- ms_attr_dyn %>%
+    nhm_ms_ts_part <- dd %>%
         filter(site_code == siteid) %>%
         left_join(nhm_q, by = 'date') %>%
         # filter(! is.na(discharge_nhm)) %>%
@@ -447,7 +461,7 @@ nhm_ms_ts_splt[is.na(nhm_ms_ts_splt)] <- NULL
 ms_write_netcdf(df_list = nhm_ms_ts_splt,
                 path = 'in/lstm_data/time_series')
 
-## 8. prepare CAMELS discharge and forcings; write NetCDFs ####
+## 9. prepare CAMELS discharge and forcings; write NetCDFs ####
 
 #locate usgs Q and daymet forcings
 discharge_files <- list.files('in/CAMELS/basin_dataset_public_v1p2/usgs_streamflow',
@@ -468,8 +482,11 @@ daymet_files <- list.files(daymet_dir, pattern = 'model_output',
 pet_files <- list.files('in/CAMELS/camels_pet_isolate', full.names = TRUE)
 
 #set up parallel processing
-clst_type <- ifelse(.Platform$OS.type == 'windows', 'PSOCK', 'FORK')
-ncores <- parallel::detectCores() %/% 1.5
+# clst_type <- ifelse(.Platform$OS.type == 'windows', 'PSOCK', 'FORK')
+# ncores <- parallel::detectCores() %/% 1.5
+registerDoFuture()
+ncores <- future::availableCores() %/% 1.5
+future::plan(multisession, workers = ncores)
 
 nfls <- length(discharge_files)
 nchunks <- nfls %/% ncores
@@ -492,13 +509,14 @@ for(iterchunk in megaloop_list){
     #attempting to get around unpredictable mid-run failures
     #by registering and unregistering in an outer loop, parallelizing by chunk.
     #at any rate it helps with restarting the overall job
-    clst <- parallel::makeCluster(spec = ncores, type = clst_type)
-    doParallel::registerDoParallel(clst)
+    # clst <- parallel::makeCluster(spec = ncores, type = clst_type)
+    # doParallel::registerDoParallel(clst)
 
     cmls_ts_splt0 <- foreach(
         i = iterchunk,
         .combine = append) %dopar% {
 
+            suppressMessages({
             q_file <- discharge_files[i]
             basin_id <- str_match(q_file,
                                   'usgs_streamflow/[0-9]+/([0-9]+)_streamflow_qc.txt')[, 2]
@@ -620,13 +638,14 @@ for(iterchunk in megaloop_list){
                     mutate(site_code = !!basin_id,
                            q_source = 'true')
             }
+            })
 
             return(list(cmls_data))
         }
 
     cmls_ts_splt <- append(cmls_ts_splt, cmls_ts_splt0)
 
-    parallel::stopCluster(clst)
+    # parallel::stopCluster(clst)
 }
 
 # saveRDS(cmls_ts_splt, '~/Desktop/cmls_ts_splt.rds')
@@ -635,7 +654,7 @@ for(iterchunk in megaloop_list){
 ms_write_netcdf(df_list = cmls_ts_splt,
                 path = 'in/lstm_data/time_series')
 
-## 9. prepare NHM estimates for CAMELS sites; write NetCDFs ####
+## 10. prepare NHM estimates for CAMELS sites; write NetCDFs ####
 
 #each NHMv1 gauge output file includes estimated Q for all upstream reaches, but
 #nowhere does the output indicate which segid corresponds to the gauge itself.
@@ -727,7 +746,7 @@ for(i in seq_along(cmls_ts_splt)){
 ms_write_netcdf(df_list = nhm_cmls_ts_splt,
                 path = 'in/lstm_data/time_series')
 
-## 10. create additional NetCDFs with field Q for each NEON site ####
+## 11. create additional NetCDFs with field Q for each NEON site ####
 
 ncdfs <- list.files('in/lstm_data/time_series', full.names = TRUE)
 
