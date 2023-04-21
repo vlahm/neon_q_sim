@@ -30,8 +30,8 @@ param_search <- list(generalist = list(1468:1507, #batch 1
                      pgdl = list(2028:2117)) #also 1628:1657
 
 #just for more accurate plotting. any models that perform well get full ensembles
-mini_ensembles <- list(specialist = list(2663:2792), #list(2293:2307, 2308:2397),
-                       pgdl = list(2248:2292))
+# mini_ensembles <- list(specialist = list(2663:2792), #list(2293:2307, 2308:2397),
+#                        pgdl = list(2248:2292))
 
 ensembles <- list(
 
@@ -87,10 +87,6 @@ dir.create('figs/lstm_plots', showWarnings = FALSE)
 dir.create('figs/lstm_plots/pred', showWarnings = FALSE)
 dir.create('figs/lstm_plots/val', showWarnings = FALSE)
 
-#field Q measured after this date is in the holdout set.
-#after training, Daymet 2022 came out, so we used it to extend the holdout set
-holdout_cutuff <- as.Date('2019-12-31')
-
 # 3. run LSTMs parameter searches (each may take several days!) ####
 
 run_lstm('generalist', param_search$generalist[[1]]) #batch 1
@@ -99,7 +95,28 @@ run_lstm('specialist', param_search$specialist[[1]]) #batch 1
 run_lstm('specialist', param_search$specialist[[2]]) #batch 2
 run_lstm('pgdl', param_search$pgdl[[1]])
 
-# 4. run ensembles for potentially skilled models (also several days apiece!) ####
+COMPLETE
+
+# 4. test potentially skilled models on the holdout set
+
+#after training, Daymet 2022 came out, so we used it to extend the holdout set.
+#as such, holdout is unusually large proportion of overall time range
+holdout <- c('2020-01-01', '2022-12-31')
+
+res <- eval_on_holdout('generalist', param_search$generalist[[1]], holdout = holdout)
+skilled_generalists1 <- identify_best_models(res, kge_thresh = 0.6)
+res <- eval_on_holdout('generalist', param_search$generalist[[2]], holdout = holdout)
+skilled_generalists2 <- identify_best_models(res, kge_thresh = 0.6)
+skilled_generalists <- bind_rows(skilled_generalists1, skilled_generalists2) %>%
+    group_by(site_code) %>%
+    filter(kge == max(kge))
+
+HERE: WHAT ABOUT TEST RANGE? STRAIGHT TO HOLDOUT?
+
+
+COMPLETE
+
+# X4. run ensembles for potentially skilled models (also several days apiece!) ####
 
 run_lstm('generalist', ensembles$TECR[[1]])
 run_lstm('generalist', ensembles$BIGC[[1]])
@@ -109,6 +126,8 @@ run_lstm('generalist', ensembles$COMO[[1]])
 run_lstm('generalist', ensembles$HOPB[[1]])
 run_lstm('pgdl', ensembles$FLNT[[1]])
 # run_lstm('specialist', ensembles$BLDE[[1]])
+
+COMPLETE
 
 # 5. gather results of ensembles ####
 

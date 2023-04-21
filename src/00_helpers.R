@@ -1976,8 +1976,7 @@ plots_and_results_rf <- function(neon_site, best, rf_df, results,
 run_lstm <- function(strategy, runset){
 
     #strategy: one of 'generalist', 'specialist', 'pdgl' (aka process-guided specialist)
-    #runset: a list of run IDs, possibly split up into batches of runs as defined in
-    #   in/lstm_configs
+    #runset: a numeric vector of run IDs
 
     strtgy <- ifelse(strategy == 'pgdl', 'specialist', strategy)
 
@@ -1991,6 +1990,137 @@ run_lstm <- function(strategy, runset){
     r2pyenv <- as.list(r2pyenv_template)
 
     py_run_file('src/lstm_dungeon/run_lstms.py')
+}
+
+eval_on_holdout <- function(strategy, runset, holdout){
+
+    #strategy: one of 'generalist', 'specialist', 'pdgl' (aka process-guided specialist)
+    #runset: a numeric vector of run IDs
+    #holdout: date range of the holdout period. will be coerced to character
+
+    strategy <- ifelse(strategy == 'pgdl', 'specialist', strategy)
+    phase <- ifelse(strategy == 'generalist', 'run', 'finetune')
+    phase_token <- ifelse(phase == 'run', 'continue', 'finetune')
+
+    #adjust test periods
+    run_range <- paste(range(runset), collapse = '-')
+    runset_parent_dir <- paste0('in/lstm_configs/runs_', run_range)
+    run_dirs <- list.files(runset_parent_dir, pattern = 'run', full.names = FALSE)
+    for(rd in run_dirs){
+        testrng_path <- file.path(runset_parent_dir, rd, 'test_ranges.csv')
+        read_csv(testrng_path) %>%
+            mutate(start_dates = as.character(holdout[1]),
+                   end_dates = as.character(holdout[2])) %>%
+            write_csv(sub('\\.csv$', '_holdout.csv', testrng_path))
+    }
+
+    #pickle (serialize) holdout ranges
+    r2pyenv_template <- new.env()
+    r2pyenv_template$confdir <- confdir
+    r2pyenv_template$runset <- paste0('runs_', run_range)
+    r2pyenv <<- as.list(r2pyenv_template)
+    py_run_file('src/lstm_dungeon/pickle_test_periods.py')
+
+    #make new configs that point to */test_ranges_holdout.pkl
+    for(rd in run_dirs){
+
+        rundir_ <- list.files('out/lstm_runs', pattern = rd, full.names = TRUE)
+        if(! length(rundir_)) next
+        cfg <- file.path(rundir_, 'config.yml')
+        file.rename(cfg, paste0(cfg, '.bak'))
+
+        read_lines(paste0(cfg, '.bak')) %>%
+            str_replace('test_ranges\\.pkl', 'test_ranges_holdout.pkl') %>%
+            write_lines(cfg)
+    }
+
+    #re-evaluate
+    r2pyenv_template$wdir <- getwd()
+    r2pyenv_template$runrange <- as.integer(runset)
+    r2pyenv_template$phase <- phase
+    r2pyenv <<- as.list(r2pyenv_template)
+    py_run_file('src/lstm_dungeon/re-evaluate_models.py')
+
+    #compute holdout metrics (NauralHydrology 1.3.0 doesn't write to test_metrics.csv?)
+    metrics <- list()
+    for(rd in run_dirs){
+
+        sites <- read_lines(file.path(runset_parent_dir, rd, 'test.txt'))
+        sites <- neon_areas %>%
+            filter(site_code %in% substr(sites, 1, 4))
+
+        rundir_ <- list.files('out/lstm_runs', pattern = rd)
+        if(! length(rundir_)) next
+
+        epoch_dir <- list.files(glue('out/lstm_runs/{r}/test', r = rundir_),
+                                full.names = TRUE)
+        if(length(epoch_dir) > 1) stop('handle this')
+
+        lstm_out <- reticulate::py_load_object(file.path(epoch_dir, 'test_results_re-eval.p'))
+        metrics[[rd]] <- mapply(function(x, site){
+
+            area <- sites$ws_area_ha[sites$site_code == site]
+
+            pred <- x$`1D`$xr$discharge_sim$to_pandas()
+            pred <- tibble(date = as.Date(rownames(pred)),
+                           discharge_sim = pred$`0`) %>%
+                #      L/s            mm/d             L/m^3  m^2/ha mm/m   s/d     ha
+                mutate(discharge_sim = discharge_sim * 1000 * 1e4 / 1000 / 86400 * area)
+
+            obs <- x$`1D`$xr$discharge_obs$to_pandas()
+            obs <- tibble(date = as.Date(rownames(obs)),
+                          discharge_obs = obs$`0`) %>%
+                mutate(discharge_obs = discharge_obs * 1000 * 1e4 / 1000 / 86400 * area)
+
+            predobs <- left_join(pred, obs, by = 'date')
+
+            tibble(#site_code = site,
+                   nse = hydroGOF::NSE(predobs$discharge_sim, predobs$discharge_obs),
+                   kge = hydroGOF::KGE(predobs$discharge_sim, predobs$discharge_obs),
+                   pbias = hydroGOF::pbias(predobs$discharge_sim, predobs$discharge_obs))
+
+        }, lstm_out, sub('_MANUALQ', '', names(lstm_out))) %>%
+            t() %>%
+            as.data.frame() %>%
+            tibble::rownames_to_column('site_code') %>%
+            mutate(site_code = sub('_MANUALQ', '', site_code))
+    }
+
+    #set configs to point back to */test_ranges.pkl
+    for(rd in run_dirs){
+
+        rundir_ <- list.files('out/lstm_runs', pattern = rd, full.names = TRUE)
+        if(! length(rundir_)) next
+        cfg <- file.path(rundir_, 'config.yml')
+        suppressWarnings(try(file.rename(paste0(cfg, '.bak'), cfg), silent = TRUE))
+    }
+
+    return(metrics)
+}
+
+identify_best_models <- function(result_list, kge_thresh){
+
+    #returns the best model for each site, so long as it's above kge_thresh
+
+    filt <- Map(
+        function(x, run){
+            filter(x, kge >= kge_thresh) %>%
+                as_tibble() %>%
+                mutate(across(-site_code, as.numeric),
+                       run = run) %>%
+                relocate(run, .after = 'site_code')
+        },
+        result_list,
+        names(result_list)
+    )
+
+    smry <- reduce(filt, function(x, y) bind_rows(x, y)) %>%
+        # arrange(site_code)
+        group_by(site_code) %>%
+        filter(kge == max(kge)) %>%
+        ungroup()
+
+    return(smry)
 }
 
 # misc helpers required to generate figures/datasets ####
