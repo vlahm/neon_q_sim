@@ -28,6 +28,13 @@ confdir = Path(r.r2pyenv['confdir'])
 rundir = Path(r.r2pyenv['rundir'])
 strtgy = r.r2pyenv['strategy']
 config_rel = r.r2pyenv['runset']
+# wd = '/hpc/home/mjv22/q_sim'
+# confdir = Path('/hpc/home/mjv22/q_sim/lstm_configs')
+# rundir = Path('/hpc/home/mjv22/q_sim/lstm_runs')
+# strtgy = 'generalist'
+# config_rel = 'runs_3003-3032'
+
+# taskID=int(os.environ['SLURM_ARRAY_TASK_ID'])
 
 os.chdir(wd)
 
@@ -64,53 +71,55 @@ all_runs = os.listdir(confdir)
 
 combined_run_bool = [not bool(re.match('run([0-9]+)', x)) for x in all_runs]
 combined_run_dirs = [x for (x, y) in zip(all_runs, combined_run_bool) if y]
+combined_run_dirs = [x for x in combined_run_dirs if not re.match('generalist_specialist_pretrain', x)]
 combined_run_dirs = list(zip(combined_run_dirs,
     [int(re.match('runs_[0-9]+-([0-9]+)$', x).group(1)) for x in combined_run_dirs]))
-normal_run_dirs = [x for (x, y) in zip(all_runs, combined_run_bool) if not y]
-normal_run_dirs = list(zip(normal_run_dirs,
-    [int(re.match('run([0-9]+)$', x).group(1)) for x in normal_run_dirs]))
+# normal_run_dirs = [x for (x, y) in zip(all_runs, combined_run_bool) if not y]
+# normal_run_dirs = list(zip(normal_run_dirs,
+#     [int(re.match('run([0-9]+)$', x).group(1)) for x in normal_run_dirs]))
 
 # config_rel = max(combined_run_dirs + normal_run_dirs, key=itemgetter(1))[0]
 config_dir_or_dirs = Path(confdir, config_rel)
 
-runs_in_dir = [x for x in os.listdir(config_dir_or_dirs) if re.match('^run[0-9]+$', x)]
-multirun_dir = bool(len(runs_in_dir))
-cfg_fls = os.listdir(config_dir_or_dirs)
-turboroutine = any([re.search('(pretrain.yml|pretrained_model_loc.txt)$', x) for x in cfg_fls])
+# runs_in_dir = [x for x in os.listdir(config_dir_or_dirs) if re.match('^run[0-9]+$', x)]
+# multirun_dir = bool(len(runs_in_dir))
+# cfg_fls = os.listdir(config_dir_or_dirs)
+# turboroutine = any([re.search('(pretrain.yml|pretrained_model_loc.txt)$', x) for x in cfg_fls])
 
-if multirun_dir:
-    id_range = re.match('^runs_([0-9]+)-([0-9]+)$', config_rel).groups()
-    id_range = list(range(int(id_range[0]), int(id_range[1]) + 1))
-    
-    cfg_fls2 = os.listdir(Path(config_dir_or_dirs, 'run' + str(id_range[0])))
-else:
-    id_range = [int(re.match('run([0-9]+)', config_rel).group(1))]
+# if multirun_dir:
+id_range = re.match('^runs_([0-9]+)-([0-9]+)$', config_rel).groups()
+id_range = list(range(int(id_range[0]), int(id_range[1]) + 1))
+
+# cfg_fls2 = os.listdir(Path(config_dir_or_dirs, 'run' + str(id_range[0])))
+# else:
+#     id_range = [int(re.match('run([0-9]+)', config_rel).group(1))]
 
 with open(Path(rundir, 'failed_runs.txt'), 'a') as f:
     f.write('---\n')
 
-transfer_learning = os.path.exists(os.path.join(config_dir_or_dirs, 'pretrained_model_loc.txt'))
+# transfer_learning = os.path.exists(os.path.join(config_dir_or_dirs, 'pretrained_model_loc.txt'))
 
-if turboroutine and not transfer_learning:
+# if turboroutine and not transfer_learning:
+# 
+#     pre_config = Path(config_dir_or_dirs, 'pretrain.yml')
+#     start_run(config_file=pre_config)
+#     turborund = sorted(rundir.iterdir(), key=os.path.getmtime)[-1]
 
-    pre_config = Path(config_dir_or_dirs, 'pretrain.yml')
-    start_run(config_file=pre_config)
-    turborund = sorted(rundir.iterdir(), key=os.path.getmtime)[-1]
+# if transfer_learning:
 
-if transfer_learning:
-
-    with open(os.path.join(config_dir_or_dirs, 'pretrained_model_loc.txt'), 'r') as pm:
-        pretrained_model_loc = pm.read().splitlines()[0]
+with open(os.path.join(config_dir_or_dirs, 'pretrained_model_loc.txt'), 'r') as pm:
+    pretrained_model_loc = pm.read().splitlines()[0]
 
 for run in id_range:
 
     runid = str(run)
-    path_extra = config_dir_or_dirs.stem if multirun_dir else ''
-    config_dir = Path(confdir, path_extra, 'run' + runid)
-    if turboroutine:
-        config_file = Path(config_dir, 'continue' + runid + '.yml')
-    else:
-        config_file = Path(config_dir, 'run' + runid + '.yml')
+    # path_extra = config_dir_or_dirs.stem if multirun_dir else ''
+    # config_dir = Path(confdir, path_extra, 'run' + runid)
+    config_dir = Path(confdir, config_dir_or_dirs.stem, 'run' + runid)
+    # if turboroutine:
+    config_file = Path(config_dir, 'continue' + runid + '.yml')
+    # else:
+    #     config_file = Path(config_dir, 'run' + runid + '.yml')
     nhm_config_file = Path(config_dir, 'run' + runid + 'nhm.yml')
     finetune_config_file = Path(config_dir, 'finetune' + runid + '.yml')
     is_finetune_run = os.path.exists(finetune_config_file)
@@ -122,17 +131,17 @@ for run in id_range:
         with open(config_file, 'r') as fp:
             config_deets = yaml.safe_load(fp)
 
-        if turboroutine and not transfer_learning:
-            with open(config_file, 'a') as fp:
-                fp.write(f'base_run_dir: {turborund}')
-            finetune(config_file=config_file)
-        elif turboroutine and transfer_learning:
-            with open(config_file, 'a') as fp:
-                fp.write(f'base_run_dir: {pretrained_model_loc}')
-            finetune(config_file=config_file)
-        elif not transfer_learning:
-            #train base model and save output directory
-            start_run(config_file=config_file)
+        # if turboroutine and not transfer_learning:
+        #     with open(config_file, 'a') as fp:
+        #         fp.write(f'base_run_dir: {turborund}')
+        #     finetune(config_file=config_file)
+        # elif turboroutine and transfer_learning:
+        with open(config_file, 'a') as fp:
+            fp.write(f'base_run_dir: {pretrained_model_loc}')
+        finetune(config_file=config_file)
+        # elif not transfer_learning:
+        #     #train base model and save output directory
+        #     start_run(config_file=config_file)
 
         most_recent_rund = sorted(rundir.iterdir(), key=os.path.getmtime)[-1]
 
@@ -165,7 +174,8 @@ for run in id_range:
         with open(finetune_dir / 'test' / final_epoch_ft / 'test_results.p', 'rb') as fp:
             results_ft = pickle.load(fp)
 
-    if (turboroutine and not is_finetune_run) or (turboroutine and IS_GENERALIST):
+    #if (turboroutine and not is_finetune_run) or (turboroutine and IS_GENERALIST):
+    if not is_finetune_run or IS_GENERALIST:
 
         eval_run(run_dir=most_recent_rund, period='test')
 
@@ -176,8 +186,7 @@ for run in id_range:
         with open(most_recent_rund / 'test' / final_epoch_ft / 'test_results.p', 'rb') as fp:
             results_ft = pickle.load(fp)
 
-    ## compute all metrics implemented in the neuralHydrology package.
-    ## (additional hydrological signatures implemented in neuralhydrology.evaluation.signatures)
+    ## compute metrics.
 
     target = config_deets['target_variables'][0]
 
@@ -193,12 +202,12 @@ for run in id_range:
 
     ## record config deets, eval metrics, and notes for this run
     
-    if multirun_dir:
-        with open(Path(confdir, path_extra, 'addtl_notes.yml'), 'r') as f:
-            addtl_notes = yaml.safe_load(f)
-    else:
-        with open(Path(confdir, 'run' + runid, 'addtl_notes.yml'), 'r') as f:
-            addtl_notes = yaml.safe_load(f)
+    # if multirun_dir:
+    with open(Path(confdir, path_extra, 'addtl_notes.yml'), 'r') as f:
+        addtl_notes = yaml.safe_load(f)
+    # else:
+    #     with open(Path(confdir, 'run' + runid, 'addtl_notes.yml'), 'r') as f:
+    #         addtl_notes = yaml.safe_load(f)
             
     addtl_notes.pop('run_dir')
 
@@ -226,7 +235,8 @@ for run in id_range:
 
     if results_ft is not None:
 
-        if turboroutine and not is_finetune_run:
+        #if turboroutine and not is_finetune_run:
+        if not is_finetune_run:
             with open(Path(config_dir, 'continue' + runid + '.yml'), 'r') as fp:
                 finetune_deets = yaml.safe_load(fp)
         else:

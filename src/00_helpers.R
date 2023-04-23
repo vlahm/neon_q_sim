@@ -1992,11 +1992,11 @@ run_lstm <- function(strategy, runset){
     py_run_file('src/lstm_dungeon/run_lstms.py')
 }
 
-eval_on_holdout <- function(strategy, runset, holdout){
+eval_on_holdout <- function(strategy, runset){
 
     #strategy: one of 'generalist', 'specialist', 'pdgl' (aka process-guided specialist)
     #runset: a numeric vector of run IDs
-    #holdout: date range of the holdout period. will be coerced to character
+    #holdout [removed]: date range of the holdout period. will be coerced to character
 
     strategy <- ifelse(strategy == 'pgdl', 'specialist', strategy)
     phase <- ifelse(strategy == 'generalist', 'run', 'finetune')
@@ -2006,33 +2006,33 @@ eval_on_holdout <- function(strategy, runset, holdout){
     run_range <- paste(range(runset), collapse = '-')
     runset_parent_dir <- paste0('in/lstm_configs/runs_', run_range)
     run_dirs <- list.files(runset_parent_dir, pattern = 'run', full.names = FALSE)
-    for(rd in run_dirs){
-        testrng_path <- file.path(runset_parent_dir, rd, 'test_ranges.csv')
-        read_csv(testrng_path) %>%
-            mutate(start_dates = as.character(holdout[1]),
-                   end_dates = as.character(holdout[2])) %>%
-            write_csv(sub('\\.csv$', '_holdout.csv', testrng_path))
-    }
+    # for(rd in run_dirs){
+    #     testrng_path <- file.path(runset_parent_dir, rd, 'test_ranges.csv')
+    #     read_csv(testrng_path) %>%
+    #         mutate(start_dates = as.character(holdout[1]),
+    #                end_dates = as.character(holdout[2])) %>%
+    #         write_csv(sub('\\.csv$', '_holdout.csv', testrng_path))
+    # }
 
     #pickle (serialize) holdout ranges
     r2pyenv_template <- new.env()
     r2pyenv_template$confdir <- confdir
     r2pyenv_template$runset <- paste0('runs_', run_range)
-    r2pyenv <<- as.list(r2pyenv_template)
-    py_run_file('src/lstm_dungeon/pickle_test_periods.py')
+    # r2pyenv <<- as.list(r2pyenv_template)
+    # py_run_file('src/lstm_dungeon/pickle_test_periods.py')
 
     #make new configs that point to */test_ranges_holdout.pkl
-    for(rd in run_dirs){
-
-        rundir_ <- list.files('out/lstm_runs', pattern = rd, full.names = TRUE)
-        if(! length(rundir_)) next
-        cfg <- file.path(rundir_, 'config.yml')
-        file.rename(cfg, paste0(cfg, '.bak'))
-
-        read_lines(paste0(cfg, '.bak')) %>%
-            str_replace('test_ranges\\.pkl', 'test_ranges_holdout.pkl') %>%
-            write_lines(cfg)
-    }
+    # for(rd in run_dirs){
+    #
+    #     rundir_ <- list.files('out/lstm_runs', pattern = rd, full.names = TRUE)
+    #     if(! length(rundir_)) next
+    #     cfg <- file.path(rundir_, 'config.yml')
+    #     file.rename(cfg, paste0(cfg, '.bak'))
+    #
+    #     read_lines(paste0(cfg, '.bak')) %>%
+    #         str_replace('test_ranges\\.pkl', 'test_ranges_holdout.pkl') %>%
+    #         write_lines(cfg)
+    # }
 
     #re-evaluate
     r2pyenv_template$wdir <- getwd()
@@ -2041,7 +2041,7 @@ eval_on_holdout <- function(strategy, runset, holdout){
     r2pyenv <<- as.list(r2pyenv_template)
     py_run_file('src/lstm_dungeon/re-evaluate_models.py')
 
-    #compute holdout metrics (NauralHydrology 1.3.0 doesn't write to test_metrics.csv?)
+    #compute metrics (NauralHydrology 1.3.0 doesn't write to test_metrics.csv?)
     metrics <- list()
     for(rd in run_dirs){
 

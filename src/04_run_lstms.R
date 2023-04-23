@@ -95,23 +95,27 @@ run_lstm('specialist', param_search$specialist[[1]]) #batch 1
 run_lstm('specialist', param_search$specialist[[2]]) #batch 2
 run_lstm('pgdl', param_search$pgdl[[1]])
 
-COMPLETE
+COMPLETE (MAKE WRITE PYTHON VARS TO GLOBAL)
 
 # 4. test potentially skilled models on the holdout set
 
 #after training, Daymet 2022 came out, so we used it to extend the holdout set.
 #as such, holdout is unusually large proportion of overall time range
-holdout <- c('2020-01-01', '2022-12-31')
+# holdout <- c('2020-01-01', '2022-12-31')
 
-res <- eval_on_holdout('generalist', param_search$generalist[[1]], holdout = holdout)
+res <- eval_on_holdout('generalist', param_search$generalist[[1]])
 skilled_generalists1 <- identify_best_models(res, kge_thresh = 0.6)
-res <- eval_on_holdout('generalist', param_search$generalist[[2]], holdout = holdout)
+res <- eval_on_holdout('generalist', param_search$generalist[[2]])
 skilled_generalists2 <- identify_best_models(res, kge_thresh = 0.6)
 skilled_generalists <- bind_rows(skilled_generalists1, skilled_generalists2) %>%
     group_by(site_code) %>%
     filter(kge == max(kge))
 
+res <- eval_on_holdout('specialist', param_search$specialist[[1]])
+skilled_specialists <- identify_best_models(res, kge_thresh = 0.6)
+
 HERE: WHAT ABOUT TEST RANGE? STRAIGHT TO HOLDOUT?
+    ask gpt
 
 
 COMPLETE

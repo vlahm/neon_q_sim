@@ -31,3 +31,9 @@ mention:
     added custom eval param (pbias)
     install rgee
         setup config
+
+
+things to hardcode:
+    strategy courier output
+    IS_PGDL
+    ...
