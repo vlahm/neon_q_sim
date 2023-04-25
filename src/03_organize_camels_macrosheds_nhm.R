@@ -132,12 +132,12 @@ ms_attr_static <- ms_load_product(macrosheds_root = './in/macrosheds',
 ms_attr_dyn <- ms_load_product(macrosheds_root = './in/macrosheds',
                                prodname = 'ws_attr_CAMELS_Daymet_forcings',
                                warn = FALSE) %>%
-    rename_with(function(x) str_extract(x, '^([^\\(]+)'))
+    rename_with(function(x) str_extract(x, '^([^\\(]+)')) %>%
+    filter(! is.na(domain), site_code != 'MC_ FLUME')
 
 #National Hydrologic Model v1 segment IDs
 nhm_sites_ms <- read_csv('in/NHMv1/sites_with_segids.csv')
 nhm_sites_camels <- read_csv('in/NHMv1/camels_gauge_info_with_segids.csv')
-
 
 ## 2. recompute CAMELS forcings; build NEON forcings and attributes ####
 
@@ -147,8 +147,8 @@ source('src/lstm_dungeon/recompute_camels_climate.R', local = new.env())
 source('src/lstm_dungeon/recompute_camels_soil.R', local = new.env())
 #summarizing of additional gridded data for NEON
 #(vegetation, topography, geology, land use, etc.)
-#not shown here, but will be included in next version of MacroSheds dataset
-#eary 2024. Contact us if you'd like to see that code now.
+#not shown here, but will be included in v2 of MacroSheds dataset in
+#early 2024. Contact us if you'd like to see that code now.
 
 ## 3. prepare MacroSheds static attributes; write CSV ####
 
@@ -304,28 +304,22 @@ ms_q <- ms_q %>%
 
 ## 6. prepare MacroSheds/NEON forcings ####
 
-ms_attr_dyn <- read_csv('in/NEON/neon_forcings.csv') %>%
-    mutate(domain = 'neon') %>%
-    bind_rows(ms_attr_dyn) %>%
-    filter(! is.na(domain), site_code != 'MC_ FLUME')
-
-neon_attr_dyn <- filter(ms_attr_dyn, domain == 'neon')
+neon_attr_dyn <- read_csv('in/NEON/neon_forcings.csv') %>%
+    mutate(domain = 'neon')
 
 ms_attr_dyn <- bind_rows(ms_attr_dyn,
+                         neon_attr_dyn,
                          mutate(neon_attr_dyn,
                                 site_code = paste0(site_code, '_MANUALQ')))
 
-nhm_sites_ms <- read_csv('in/NHMv1/sites_with_segids.csv')
-ms_attr_dyn <- ms_attr_dyn %>%
+nhm_ms_attr_dyn <- ms_attr_dyn %>%
     filter(site_code %in% nhm_sites_ms$site_code) %>%
     mutate(site_code = paste0('NHM_', site_code)) %>%
-    bind_rows(ms_attr_dyn) %>%
     select(-domain, -network)
 
+ms_attr_dyn <- select(ms_attr_dyn, -domain, -network)
 
 ## 7. merge MacroSheds discharge and forcings; write NetCDFs ####
-
-dd <- ms_attr_dyn
 
 ms_attr_dyn <- semi_join(ms_attr_dyn, ms_q, by = 'site_code')
 ms_q <- semi_join(ms_q, ms_attr_dyn, by = 'site_code')
@@ -351,7 +345,7 @@ ms_attr_dyn <- left_join(ms_q, ms_attr_dyn, by = c('date', 'site_code')) %>%
 ms_attr_dyn <- Filter(function(x){
     cmplt <- which(complete.cases(select(x, -discharge)))
     if(length(cmplt)) TRUE else FALSE
-}, ms_attr_dyn)
+}, ms_attr_dyn))
 
 #drop leading/trailing runs of missing forcings data
 ms_attr_dyn <- lapply(ms_attr_dyn, function(x){
@@ -414,12 +408,25 @@ ms_write_netcdf(df_list = ms_attr_dyn,
 
 ## 8. prepare NHM estimates for MacroSheds sites; write NetCDFs ####
 
-nhm_ms_ts_splt <- list()
+nhm_sites_incl <- unique(nhm_ms_attr_dyn$site_code)
+
+nhm_ms_attr_dyn <- nhm_ms_attr_dyn %>%
+    group_split(site_code) %>%
+    as.list()
+
+names(nhm_ms_attr_dyn) <- sapply(nhm_ms_attr_dyn, function(x) x$site_code[1])
+
 for(i in 1:nrow(nhm_sites_ms)){
 
     jobid <- pull(nhm_sites_ms[i, 'JobId'])
     segid <- as.character(pull(nhm_sites_ms[i, 'NHM_SEGID']))
     siteid <- pull(nhm_sites_ms[i, 'site_code'])
+    nhm_siteid <- paste0('NHM_', siteid)
+
+    # print(paste(i, nhm_siteid))
+
+    if(! nhm_siteid %in% nhm_sites_incl) next
+
     ws_area_ha <- pull(ms_areas[ms_areas$site_code == siteid, 'ws_area_ha'])
 
     nhm_q <- read_csv(glue('in/NHMv1/nhm_output_ms/basin_{b}/model_output/seg_outflow.csv',
@@ -432,33 +439,27 @@ for(i in 1:nrow(nhm_sites_ms)){
         #      mm/d            ft^3/s          m^3/ft^3    ha/m^2 mm/m   s/d     ha
         mutate(discharge_nhm = discharge_nhm * 0.0283168 * 1e-4 * 1000 * 86400 / !!ws_area_ha)
 
-    nhm_ms_ts_part <- dd %>%
-        filter(site_code == siteid) %>%
+    nhm_part <- nhm_ms_attr_dyn[[nhm_siteid]] %>%
         left_join(nhm_q, by = 'date') %>%
-        # filter(! is.na(discharge_nhm)) %>%
         arrange(date) %>%
         select(site_code, date, discharge = discharge_nhm, dayl, prcp, srad,
-               swe, tmax, tmin, vp) %>%
+               swe, tmax, tmin, vp, pet) %>%
         mutate(date = as.numeric(as.Date(date)),
-               site_code = paste0('NHM_', site_code))
+               site_code = site_code)
 
-    not_shoulder_na <- ! cumprod(is.na(nhm_ms_ts_part$discharge)) &
-        rev(! cumprod(is.na(rev(nhm_ms_ts_part$discharge))))
-    nhm_ms_ts_part <- nhm_ms_ts_part[not_shoulder_na, ]
+    not_shoulder_na <- ! cumprod(is.na(nhm_part$discharge)) &
+        rev(! cumprod(is.na(rev(nhm_part$discharge))))
+    nhm_part <- nhm_part[not_shoulder_na, ]
 
-    nhm_ms_ts_splt[[i]] <- try({
-        nhm_ms_ts_part %>%
-            tidyr::complete(date = seq(min(date), max(date), 1)) %>%
-            mutate(across(-all_of(c('date', 'site_code', 'discharge')),
-                          ~na_interpolation(., maxgap = 3)))
-    }, silent = TRUE)
+    nhm_ms_attr_dyn[[nhm_siteid]] <- nhm_part %>%
+        tidyr::complete(date = seq(min(date), max(date), 1)) %>%
+        mutate(across(-all_of(c('date', 'site_code', 'discharge')),
+                      ~na_interpolation(., maxgap = 3)))
 
-    if(inherits(nhm_ms_ts_splt[[i]], 'try-error')) nhm_ms_ts_splt[[i]] = NA
+    # print(apply(nhm_ms_attr_dyn[[nhm_siteid]][, 4:11], 2, function(x) sum(is.na(x))))
 }
 
-nhm_ms_ts_splt[is.na(nhm_ms_ts_splt)] <- NULL
-
-ms_write_netcdf(df_list = nhm_ms_ts_splt,
+ms_write_netcdf(df_list = nhm_ms_attr_dyn,
                 path = 'in/lstm_data/time_series')
 
 ## 9. prepare CAMELS discharge and forcings; write NetCDFs ####
