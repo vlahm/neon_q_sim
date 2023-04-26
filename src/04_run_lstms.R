@@ -7,6 +7,12 @@ library(reticulate)
 library(glue)
 #four more packages loaded in section 6
 
+#NOTE: IF YOU ARE NOT USING OUR BUNDLED INPUT DATA, THIS FILE REQUIRES EDITS,
+#   AS LSTM RUN IDs AND DIRECTORY NAMES WILL CHANGE. YOU'LL ALSO HAVE TO
+#   MODIFY THE CONFIGURATION FILES TO POINT TO THE CORRECT PRETRAIN LOCATIONS,
+#IF YOU INTEND TO RUN LSTMS ON AN HPC CLUSTER, USE
+#   src/lstm_dungeon/run_lstms_hpc.py instead of run_lstms_local.py
+
 #see step 2 in src/lstm_dungeon/README.txt for installing conda environment
 use_condaenv('nh2')
 xr <- import("xarray")
@@ -18,20 +24,94 @@ if(! exists('ts_plot')) source('src/00_helpers.R')
 if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 if(! dir.exists('in/lstm_data')) source('src/03_organize_camels_macrosheds_nhm.R', local = new.env())
 
-# 1. setup (inputs) ####
+# 1. setup ####
+
+options(readr.show_progress = FALSE,
+        readr.show_col_types = FALSE,
+        timeout = 3000)
+
+#establish i/o directory locations
+confdir <- file.path(getwd(), 'in/lstm_configs')
+datadir <- file.path(getwd(), 'in/lstm_data')
+rundir <- file.path(getwd(), 'out/lstm_runs')
+
+#insert i/o directories into model/config text files
+cfgs <- list.files('in/lstm_configs', pattern = '.*\\.yml$',
+                   recursive = TRUE, full.names = TRUE)
+cfgs <- c(cfgs, list.files('out/lstm_runs', pattern = 'config.yml',
+                           recursive = TRUE, full.names = TRUE))
+
+for(cfg_ in cfgs){
+    read_file(cfg_) %>%
+        str_replace_all('PLACEHOLDER3', datadir) %>%
+        str_replace_all('PLACEHOLDER2', rundir) %>%
+        str_replace_all('PLACEHOLDER', confdir) %>%
+        write_file(cfg_)
+}
+
+#build output dir structure
+dir.create('out/lstm_out', showWarnings = FALSE)
+dir.create('out/lstm_out/predictions', showWarnings = FALSE)
+dir.create('out/lstm_out/fit', showWarnings = FALSE)
+dir.create('figs/lstm_plots', showWarnings = FALSE)
+dir.create('figs/lstm_plots/pred', showWarnings = FALSE)
+dir.create('figs/lstm_plots/val', showWarnings = FALSE)
+
+
+# 2. run parameter searches (each may take several days! use HPC if possible) ####
 
 #establish run IDs
-param_search <- list(generalist = list(1468:1507, #batch 1
-                                       1508:1520), #batch 2
-                     specialist = list(1548:1627, #batch 1
-                                       1748:1937), #batch 2
-                     # specialist = list(2293:2307, #batch 1
-                     #                   2308:2422), #batch 2
-                     pgdl = list(2028:2117)) #also 1628:1657
+param_search <- list(generalist = 3003:3032,
+                     specialist = 3033:3812,
+                     pgdl_generalist = 3813:3842,
+                     pgdl_specialist = 3843:4112)
 
-#just for more accurate plotting. any models that perform well get full ensembles
-# mini_ensembles <- list(specialist = list(2663:2792), #list(2293:2307, 2308:2397),
-#                        pgdl = list(2248:2292))
+run_lstm('generalist', param_search$generalist)
+run_lstm('specialist', param_search$specialist)
+run_lstm('generalist', param_search$pgdl_generalist)
+run_lstm('specialist', param_search$pgdl_specialist)
+
+# 3. evaluate all models. determine where ensembles are warranted ####
+
+skilled_generalists <- eval_lstms('generalist', param_search$generalist) %>%
+    identify_best_models(kge_thresh = 0.6)
+
+skilled_specialists <- eval_lstms('specialist', param_search$specialist) %>%
+    identify_best_models(kge_thresh = 0.6)
+
+skilled_pgdl_generalists <- eval_lstms('generalist', param_search$pgdl_generalist) %>%
+    identify_best_models(kge_thresh = 0.6)
+
+skilled_pgdl_specialists <- eval_lstms('specialist', param_search$pgdl_specialist) %>%
+    identify_best_models(kge_thresh = 0.6)
+
+skilled <- bind_rows(
+        mutate(skilled_generalists, strategy = 'gen'),
+        mutate(skilled_specialists, strategy = 'spec'),
+        mutate(skilled_pgdl_generalists, strategy = 'pgdl_gen'),
+        mutate(skilled_pgdl_specialists, strategy = 'pgdl_spec')
+    ) %>%
+    group_by(site_code) %>%
+    filter(kge == max(kge)) %>%
+    ungroup() %>%
+    arrange(desc(kge)) %>%
+    print(n = 100)
+
+# write_csv(skilled, '~/Desktop/dcc_runs/skilled_searches.csv')
+# skilled = read_csv('~/Desktop/dcc_runs/skilled_searches.csv')
+
+# 4. build ensemble configs ####
+
+unique_runs <- unique(skilled$run)
+for(run in unique_runs){
+
+    #some generalists perform well on multiple sites
+    sites <- filter(skilled, run == !!run)$site_code
+
+    build_ensemble_config(sites = sites, runid = run, param_search = param_search)
+}
+
+# 5. run ensembles for potentially skilled models (also several days apiece!) ####
 
 ensembles <- list(
 
@@ -59,69 +139,6 @@ ensembles <- list(
     MART = list(2973:3002)
 )
 
-# 2. setup (rigamarole) ####
-
-#establish i/o directory locations
-confdir <- file.path(getwd(), 'in/lstm_configs')
-datadir <- file.path(getwd(), 'in/lstm_data')
-rundir <- file.path(getwd(), 'out/lstm_runs')
-
-#insert i/o directories into model/config text files
-cfgs <- list.files('.', pattern = '.*\\.yml$', recursive = TRUE, full.names = TRUE)
-cfgs <- c(cfgs, list.files('.', pattern = 'pretrained_model_loc',
-                           recursive = TRUE, full.names = TRUE))
-for(cfg_ in cfgs){
-
-    read_file(cfg_) %>%
-        str_replace_all('PLACEHOLDER3', datadir) %>%
-        str_replace_all('PLACEHOLDER2', rundir) %>%
-        str_replace_all('PLACEHOLDER', confdir) %>%
-        write_file(cfg_)
-}
-
-#build output dir structure
-dir.create('out/lstm_out', showWarnings = FALSE)
-dir.create('out/lstm_out/predictions', showWarnings = FALSE)
-dir.create('out/lstm_out/fit', showWarnings = FALSE)
-dir.create('figs/lstm_plots', showWarnings = FALSE)
-dir.create('figs/lstm_plots/pred', showWarnings = FALSE)
-dir.create('figs/lstm_plots/val', showWarnings = FALSE)
-
-# 3. run LSTMs parameter searches (each may take several days!) ####
-
-run_lstm('generalist', param_search$generalist[[1]]) #batch 1
-run_lstm('generalist', param_search$generalist[[2]]) #batch 2
-run_lstm('specialist', param_search$specialist[[1]]) #batch 1
-run_lstm('specialist', param_search$specialist[[2]]) #batch 2
-run_lstm('pgdl', param_search$pgdl[[1]])
-
-COMPLETE (MAKE WRITE PYTHON VARS TO GLOBAL)
-
-# 4. test potentially skilled models on the holdout set
-
-#after training, Daymet 2022 came out, so we used it to extend the holdout set.
-#as such, holdout is unusually large proportion of overall time range
-# holdout <- c('2020-01-01', '2022-12-31')
-
-res <- eval_on_holdout('generalist', param_search$generalist[[1]])
-skilled_generalists1 <- identify_best_models(res, kge_thresh = 0.6)
-res <- eval_on_holdout('generalist', param_search$generalist[[2]])
-skilled_generalists2 <- identify_best_models(res, kge_thresh = 0.6)
-skilled_generalists <- bind_rows(skilled_generalists1, skilled_generalists2) %>%
-    group_by(site_code) %>%
-    filter(kge == max(kge))
-
-res <- eval_on_holdout('specialist', param_search$specialist[[1]])
-skilled_specialists <- identify_best_models(res, kge_thresh = 0.6)
-
-HERE: WHAT ABOUT TEST RANGE? STRAIGHT TO HOLDOUT?
-    ask gpt
-
-
-COMPLETE
-
-# X4. run ensembles for potentially skilled models (also several days apiece!) ####
-
 run_lstm('generalist', ensembles$TECR[[1]])
 run_lstm('generalist', ensembles$BIGC[[1]])
 run_lstm('generalist', ensembles$WALK[[1]])
@@ -133,7 +150,7 @@ run_lstm('pgdl', ensembles$FLNT[[1]])
 
 COMPLETE
 
-# 5. gather results of ensembles ####
+# 6. gather results of ensembles ####
 
 metrics <- matrix(
     NA, nrow = length(ensembles), ncol = 6,
@@ -234,7 +251,7 @@ as.data.frame(metrics) %>%
     select(site_code, NSE, NSE_holdout, KGE, KGE_holdout, pbias, pbias_holdout) %>%
     write_csv('out/lstm_out/results.csv')
 
-# 6. generate output plots and datasets ####
+# 7. generate output plots and datasets ####
 
 library(lubridate)
 library(xts)

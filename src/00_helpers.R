@@ -1973,32 +1973,32 @@ plots_and_results_rf <- function(neon_site, best, rf_df, results,
 
 # LSTM ####
 
-run_lstm <- function(strategy, runset){
+run_lstm <- function(strategy, runset, ensemble = FALSE){
 
-    #strategy: one of 'generalist', 'specialist', 'pdgl' (aka process-guided specialist)
+    #strategy: either 'generalist' or 'specialist'
     #runset: a numeric vector of run IDs
-
-    strtgy <- ifelse(strategy == 'pgdl', 'specialist', strategy)
+    #ensemble: logical. if true, runs finetune1 and finetune2 in sequence for
+    #   each iteration of runset (so continue* and finetune* filesets must both
+    #   be present in the corresponding config directories)
 
     #crude way to pass variables into python script from R
     r2pyenv_template <- new.env()
     r2pyenv_template$wdir <- getwd()
     r2pyenv_template$confdir <- confdir
     r2pyenv_template$rundir <- rundir
-    r2pyenv_template$strategy <- strtgy
+    r2pyenv_template$strategy <- strategy
+    r2pyenv_template$ensemble <- ensemble
     r2pyenv_template$runset <- paste0('runs_', paste(range(runset), collapse = '-'))
-    r2pyenv <- as.list(r2pyenv_template)
+    r2pyenv <<- as.list(r2pyenv_template)
 
-    py_run_file('src/lstm_dungeon/run_lstms.py')
+    py_run_file('src/lstm_dungeon/run_lstms_local.py')
 }
 
-eval_on_holdout <- function(strategy, runset){
+eval_lstms <- function(strategy, runset){
 
-    #strategy: one of 'generalist', 'specialist', 'pdgl' (aka process-guided specialist)
+    #strategy: either 'generalist' or 'specialist'
     #runset: a numeric vector of run IDs
-    #holdout [removed]: date range of the holdout period. will be coerced to character
 
-    strategy <- ifelse(strategy == 'pgdl', 'specialist', strategy)
     phase <- ifelse(strategy == 'generalist', 'run', 'finetune')
     phase_token <- ifelse(phase == 'run', 'continue', 'finetune')
 
@@ -2049,14 +2049,19 @@ eval_on_holdout <- function(strategy, runset){
         sites <- neon_areas %>%
             filter(site_code %in% substr(sites, 1, 4))
 
-        rundir_ <- list.files('out/lstm_runs', pattern = rd)
-        if(! length(rundir_)) next
+        ptn <- if(strategy == 'specialist') sub('run', 'finetune', rd) else rd
+        rundir_ <- list.files('out/lstm_runs', pattern = ptn)
+
+        if(! length(rundir_)){
+            message('no results for ', ptn, '; moving on')
+            next
+        }
 
         epoch_dir <- list.files(glue('out/lstm_runs/{r}/test', r = rundir_),
                                 full.names = TRUE)
         if(length(epoch_dir) > 1) stop('handle this')
 
-        lstm_out <- reticulate::py_load_object(file.path(epoch_dir, 'test_results_re-eval.p'))
+        lstm_out <- reticulate::py_load_object(file.path(epoch_dir, 'test_results.p'))
         metrics[[rd]] <- mapply(function(x, site){
 
             area <- sites$ws_area_ha[sites$site_code == site]
@@ -2086,14 +2091,14 @@ eval_on_holdout <- function(strategy, runset){
             mutate(site_code = sub('_MANUALQ', '', site_code))
     }
 
-    #set configs to point back to */test_ranges.pkl
-    for(rd in run_dirs){
-
-        rundir_ <- list.files('out/lstm_runs', pattern = rd, full.names = TRUE)
-        if(! length(rundir_)) next
-        cfg <- file.path(rundir_, 'config.yml')
-        suppressWarnings(try(file.rename(paste0(cfg, '.bak'), cfg), silent = TRUE))
-    }
+    # #set configs to point back to */test_ranges.pkl
+    # for(rd in run_dirs){
+    #
+    #     rundir_ <- list.files('out/lstm_runs', pattern = rd, full.names = TRUE)
+    #     if(! length(rundir_)) next
+    #     cfg <- file.path(rundir_, 'config.yml')
+    #     suppressWarnings(try(file.rename(paste0(cfg, '.bak'), cfg), silent = TRUE))
+    # }
 
     return(metrics)
 }
@@ -2121,6 +2126,107 @@ identify_best_models <- function(result_list, kge_thresh){
         ungroup()
 
     return(smry)
+}
+
+build_ensemble_config <- function(sites, runid, param_search, ensemb_n = 30){
+
+    r <- str_extract(runid, '[0-9]+')
+    strategy <- names(which(sapply(param_search, function(x) r %in% x)))
+    if(length(strategy) != 1) stop('!')
+
+    ## build new config dir structure
+
+    existing_runs <- list.files(confdir, pattern = '^run')
+
+    last_runid <- sapply(existing_runs, function(x){
+        as.numeric(str_match(x, 'runs_[0-9]+-([0-9]+)')[, 2])
+    }, USE.NAMES = FALSE) %>%
+        max()
+
+    next_runid <- last_runid + 1
+    run_seq <- seq(next_runid, next_runid + ensemb_n - 1)
+
+    cfgnew_ <- paste0('runs_', paste(range(run_seq), collapse = '-'))
+    cfgnew <- file.path(confdir, cfgnew_, paste0('run', run_seq))
+    lapply(cfgnew, dir.create, recursive = TRUE)
+
+    ## copy and modify config(s) from which this ensemble is derived...
+
+    if(grepl('specialist', strategy)){
+
+        runid2 <- runid
+        r2 <- r
+
+        cfg00_ <- paste0('runs_', paste(range(param_search[[strategy]]), collapse = '-'))
+        cfg00 <- file.path(confdir, cfg00_, runid2)
+
+        runid <- read_lines(file.path(cfg00, paste0('finetune', r, '.yml'))) %>%
+            str_subset('base_run_dir') %>%
+            str_extract('/(run[0-9]+)_[0-9_]+$', group = 1)
+        r <- str_extract(runid, '[0-9]+')
+    }
+
+    ## handle finetune1 (continue) files and test files
+
+    src_strat <- case_when(grepl('generalist', strategy) ~ strategy,
+                           strategy == 'specialist' ~ 'generalist',
+                           strategy == 'pgdl_specialist' ~ 'pgdl_generalist')
+
+    cfg0_ <- paste0('runs_', paste(range(param_search[[src_strat]]), collapse = '-'))
+    cfg0 <- file.path(confdir, cfg0_, runid)
+
+    file.copy(file.path(cfg0, 'continue.txt'),
+              file.path(cfgnew, 'continue.txt'))
+    file.copy(file.path(cfg0, 'continue_train_ranges.csv'),
+              file.path(cfgnew, 'continue_train_ranges.csv'))
+
+    test_new <- read_lines(file.path(cfg0, 'test.txt')) %>%
+        str_subset(paste(sites, collapse = '|'))
+    lapply(cfgnew, function(x) write_lines(test_new, file.path(x, 'test.txt')))
+
+    testrange_new <- read_csv(file.path(cfg0, 'test_ranges.csv')) %>%
+        filter(basin_id %in% paste0(sites, '_MANUALQ'))
+    lapply(cfgnew, function(x) write_csv(testrange_new, file.path(x, 'test_ranges.csv')))
+
+    yml <- read_lines(file.path(cfg0, paste0('continue', r, '.yml')))
+    yml <- sub('seed: [0-9]+', paste('seed:', sample(1:99999, 1)), yml)
+    yml <- sub(cfg0_, cfgnew_, yml)
+    yml <- sub('save_weights_every: 1', 'save_weights_every: 999', yml)
+    lapply(run_seq, function(x){
+        out <- sub(runid, paste0('run', x), yml)
+        write_lines(out,
+                    file.path(confdir, cfgnew_, paste0('run', x),
+                              paste0('continue', x, '.yml')))
+    })
+
+    if(grepl('specialist', strategy)){
+
+        ## handle finetune2 files
+
+        file.copy(file.path(cfg00, 'finetune.txt'),
+                  file.path(cfgnew, 'finetune.txt'))
+        file.copy(file.path(cfg00, 'finetune_train_ranges.csv'),
+                  file.path(cfgnew, 'finetune_train_ranges.csv'))
+
+        yml <- read_lines(file.path(cfg00, paste0('finetune', r2, '.yml')))
+        yml <- sub('seed: [0-9]+', paste('seed:', sample(1:99999, 1)), yml)
+        yml <- sub(cfg00_, cfgnew_, yml)
+        lapply(run_seq, function(x){
+            out <- sub(runid2, paste0('run', x), yml)
+            sub('experiment_name: finetune[0-9]+',
+                paste0('experiment_name: finetune', x),
+                out) %>%
+                write_lines(file.path(confdir, cfgnew_, paste0('run', x),
+                                      paste0('finetune', x, '.yml')))
+        })
+    }
+
+    #pickle (serialize) train and test ranges
+    r2pyenv_template <- new.env()
+    r2pyenv_template$confdir <- confdir
+    r2pyenv_template$runset <- cfgnew_
+    r2pyenv <<- as.list(r2pyenv_template)
+    py_run_file('src/lstm_dungeon/pickle_traintest_periods.py')
 }
 
 # misc helpers required to generate figures/datasets ####

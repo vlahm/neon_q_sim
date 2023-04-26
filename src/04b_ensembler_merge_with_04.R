@@ -2,6 +2,66 @@
 # library(ncdf4)
 # library(purrr)
 
+
+
+
+
+#PREPARING LOCAL CONFIG AND RUNS FOR PUBLICATION
+#unzip the directories with PLACEHOLDERS,
+#ADD run_dir: PLACEHOLDER2 to all configs
+#good lord, also conform all finetune_special.txt to finetune.txt and adjust configs accordingly
+    #CONFIG: find . -name finetune_special.txt -exec rename -f 's/finetune_special.txt/finetune.txt/' {} \;
+    #CONFIG: find . -name '*.yml' | xargs sed -e 's/finetune_special/finetune/g' -i
+    #RUNS: find . -name 'config.yml' | xargs sed -e 's/finetune_special/finetune/g' -i
+# set save_weights_every: 1 to 1000
+#leave test dirs? probs.
+#only modify the new ensemble directories as below, then
+#REMOVE ALL non-terminal run files
+#add them to the unzipped dirs and re-zip
+#MAKE SURE ".", "in/lstm_configs", and "out/lstm_runs" BELOW ARE CHANGED TO THE LOCATION OF THE NEW ENSEMBLE DIRS
+ftgrep .yml 'workers: 48'
+find . -name '*validation*'
+ftgrep .yml run_configs
+# find . -name '*.yml' | xargs sed -e 's/num_workers: 48/num_workers: 8/g' -i #shouldn't be necessary, but template if needed
+
+#(DCC config locations)
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_data|PLACEHOLDER3|g' -i"))
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_runs|PLACEHOLDER2|g' -i"))
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_configs|PLACEHOLDER|g' -i"))
+# system(paste0("find in/lstm_configs -name 'pretrained_model_loc.txt' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runs|PLACEHOLDER2|g' -i"))
+
+#(DCC run location)
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_data|PLACEHOLDER3|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_runs|PLACEHOLDER2|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/runs|PLACEHOLDER2|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_configs|PLACEHOLDER|g' -i"))
+
+# system(paste0("find out/ergh -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_data|PLACEHOLDER3|g' -i"))
+# system(paste0("find out/ergh -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_runs|PLACEHOLDER2|g' -i"))
+# system(paste0("find out/ergh -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/runs|PLACEHOLDER2|g' -i"))
+# system(paste0("find out/ergh -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_configs|PLACEHOLDER|g' -i"))
+
+cfgs <- list.files('out/ergh', pattern = 'config.yml', recursive = TRUE, full.names = TRUE)
+for(cfg_ in cfgs){
+    read_file(cfg_) %>%
+        str_replace_all('PLACEHOLDER3', datadir) %>%
+        str_replace_all('PLACEHOLDER2', rundir) %>%
+        str_replace_all('PLACEHOLDER', confdir) %>%
+        write_file(cfg_)
+}
+
+
+#for dcc runs (change cfg parent dir!)
+system(paste0("find in/lstm_configs/runs_4113-4142 -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_data|/hpc/home/mjv22/q_sim/lstm_data|g' -i"))
+system(paste0("find in/lstm_configs/runs_4113-4142 -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/out/lstm_runs|/hpc/home/mjv22/q_sim/lstm_runs|g' -i"))
+system(paste0("find in/lstm_configs/runs_4113-4142 -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_configs|/hpc/home/mjv22/q_sim/lstm_configs|g' -i"))
+
+
+
+
+
+
+
 # system = function(x, ...) system(x, ..., wait = T)
 
 #jk. none of the rest of this file needs to be merged
@@ -72,6 +132,18 @@ system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mik
 system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_data|PLACEHOLDER3|g' -i"))
 system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/out/lstm_runs|PLACEHOLDER2|g' -i"))
 system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_configs|PLACEHOLDER|g' -i"))
+
+#(DCC config locations)
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_data|PLACEHOLDER3|g' -i"))
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_runs|PLACEHOLDER2|g' -i"))
+system(paste0("find in/lstm_configs -name '*.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_configs|PLACEHOLDER|g' -i"))
+# system(paste0("find in/lstm_configs -name 'pretrained_model_loc.txt' | xargs sed -e 's|/home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runs|PLACEHOLDER2|g' -i"))
+
+#(DCC run location)
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_data|PLACEHOLDER3|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_runs|PLACEHOLDER2|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/runs|PLACEHOLDER2|g' -i"))
+system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_configs|PLACEHOLDER|g' -i"))
 
 #checks
 if(length(suppressWarnings(system('grep -rl --include="*.yml" "qa_experimentation" out/lstm_runs', intern=T)))) stop('oi')

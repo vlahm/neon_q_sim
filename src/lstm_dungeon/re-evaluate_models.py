@@ -33,30 +33,37 @@ for run in runs_to_reeval:
     
     rundir = wd / 'out' / 'lstm_runs' / rundir
 
-    try:
-        epoch_list = os.listdir(rundir / 'test')
-    except:
-        print('cant re-evaluate ' + str(run))
-        continue
+    # try:
+    #     epoch_list = os.listdir(rundir / 'test')
+    # except:
+    #     print('cant re-evaluate ' + str(run))
+    #     continue
 
-    epoch_list.sort()
-    final_epoch = epoch_list[-1]
-
-    old_eval = rundir / 'test' / final_epoch / 'test_results.p'
-    old_metrics = rundir / 'test' / final_epoch / 'test_metrics.csv'
-    os.rename(old_eval, str(old_eval) + '.bak')
-    os.rename(old_metrics, str(old_metrics) + '.bak')
-
-    try:
-        eval_run(run_dir=rundir, period='test')
-    except:
-        os.rename(str(old_eval) + '.bak', old_eval)
-        os.rename(str(old_metrics) + '.bak', old_metrics)
+    # epoch_list.sort()
+    # final_epoch = epoch_list[-1]
+    # 
+    # old_eval = rundir / 'test' / final_epoch / 'test_results.p'
+    # old_metrics = rundir / 'test' / final_epoch / 'test_metrics.csv'
     
-    os.rename(old_eval, rundir / 'test' / final_epoch / 'test_results_re-eval.p')
-    os.rename(old_metrics, rundir / 'test' / final_epoch / 'test_metrics_re-eval.csv')
-    os.rename(str(old_eval) + '.bak', old_eval)
-    os.rename(str(old_metrics) + '.bak', old_metrics)
+    # try:
+    #     os.rename(old_eval, str(old_eval) + '.bak')
+    #     os.rename(old_metrics, str(old_metrics) + '.bak')
+    # except:
+    #     pass
+
+    # try:
+    eval_run(run_dir=rundir, period='test')
+    # except:
+    #     try:
+    #         os.rename(str(old_eval) + '.bak', old_eval)
+    #         os.rename(str(old_metrics) + '.bak', old_metrics)
+    #     except:
+    #         pass
+    
+    # os.rename(old_eval, rundir / 'test' / final_epoch / 'test_results_re-eval.p')
+    # os.rename(old_metrics, rundir / 'test' / final_epoch / 'test_metrics_re-eval.csv')
+    # os.rename(str(old_eval) + '.bak', old_eval)
+    # os.rename(str(old_metrics) + '.bak', old_metrics)
 
     # with open(rundir / 'test' / final_epoch / 'test_results.p', 'rb') as fp:
     #     results = pickle.load(fp)

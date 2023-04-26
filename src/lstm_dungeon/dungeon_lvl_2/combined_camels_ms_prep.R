@@ -203,9 +203,9 @@ manualqsites = list.files(file.path(combined_camels_ms_dir, 'time_series'), patt
 # sites_for_routine <- 'REDB_MANUALQ'
 # sites_for_routine <- grep('TOMB', paste0(neon_sites, '_MANUALQ'), invert = T, value = T)[1] #useful for generalist (still runs a mod per site)
 # sites_for_routine <- grep('CUPE|PRIN|OKSR|CARI|ARIK|BIGC|WLOU|BLDE', paste0(neon_sites, '_MANUALQ'), value = T)
-# sites_for_routine <- grep('FLNT|TOMB|BLWA|BLUE|HOPB|BIGC|SYCA|PRIN|ARIK|KING', paste0(neon_sites, '_MANUALQ'), value = T) #all NHM runs
+sites_for_routine <- grep('FLNT|TOMB|BLWA|BLUE|HOPB|BIGC|SYCA|PRIN|ARIK|KING', paste0(neon_sites, '_MANUALQ'), value = T) #all NHM runs
 # sites_for_routine <- grep('CUPE|TOMB|FLNT|SYCA|HOPB|TECR|BLUE|REDB|KING|WALK|BLWA|MCDI|MCRA|MAYF|LECO|COMO|MART|LEWI|POSE|GUIL', paste0(neon_sites, '_MANUALQ'), value = T) #remainder of specialist runs
-sites_for_routine <- grep('WLOU|BIGC|BLDE|PRIN|CARI|ARIK|OKSR|CUPE|TOMB|FLNT|SYCA|HOPB|TECR|BLUE|REDB|KING|WALK|BLWA|MCDI|MCRA|MAYF|LECO|COMO|MART|LEWI|POSE|GUIL', paste0(neon_sites, '_MANUALQ'), value = T) #all sites
+# sites_for_routine <- grep('WLOU|BIGC|BLDE|PRIN|CARI|ARIK|OKSR|CUPE|TOMB|FLNT|SYCA|HOPB|TECR|BLUE|REDB|KING|WALK|BLWA|MCDI|MCRA|MAYF|LECO|COMO|MART|LEWI|POSE|GUIL', paste0(neon_sites, '_MANUALQ'), value = T) #all sites
 # sites_for_routine <- grep('WLOU|BIGC|BLDE|PRIN|CARI|ARIK|OKSR|TOMB|FLNT|SYCA|HOPB|BLUE|KING|WALK|BLWA|MCDI|MCRA|MAYF|LECO|COMO|MART|LEWI|POSE|GUIL', paste0(neon_sites, '_MANUALQ'), value = T)
 # sites_for_routine <- grep(xsite, paste0(neon_sites, '_MANUALQ'), value = T)
 # sites_for_routine <- grep('REDB|TECR|CUPE', paste0(neon_sites, '_MANUALQ'), value = T)
@@ -240,7 +240,7 @@ for(ix in siterange){
 addtl_config_list <- list(
 
     #add a descriptive note for this run
-    run_note = 'DCC PGDL generalist search',
+    run_note = 'DCC PGDL specialist search',
     # run_note = paste("specialist ensembles forreals:", xsite),
     # run_note = "specialist subset (all but tecr, cupe, redb) with fixed params 5x",
     # run_note = "all pgdl with fixed params 5x",
@@ -457,7 +457,7 @@ addtl_config_list <- list(
     #if an integer (not NULL), model paramater specifications will be ignored (and chosen
     #   automatically to sample parameter options)
     # param_search_iters = NULL, #****
-    param_search_iters = 1, #20
+    param_search_iters = 30, #20
     #if ensemble is an integer, that number of models will be fit and their
     #   model objects combined (not implemented)
     # ensemble = NULL,
@@ -2648,7 +2648,7 @@ if(! is.na(addtl_config_list$nhm_lineup) && addtl_config_list$nhm_lineup == 1){
 #     write_lines(xx, cfg_)
 # }
 
-### 4aD remove camels target sites from camels pretrain ####
+###X 4aD remove camels target sites from camels pretrain ####
 if(length(addtl_config_list$camels_test_basins)){
     rm_bsns = gsub('_GAPPED$', '', addtl_config_list$camels_test_basins)
 
@@ -2673,12 +2673,12 @@ if(strategy == 'generalist'){
     }
 }
 
-### 4aF write strategy courier file for nh_fiddling.py ####
+###X 4aF write strategy courier file for nh_fiddling.py ####
 
 strategy <- ifelse(! is.na(addtl_config_list$nhm_lineup) && addtl_config_list$nhm_lineup == 2, 'pgdl2', strategy)
 write_lines(strategy, '~/git/macrosheds/qa_experimentation/imputation/data/nh_methods/strategy_courier.txt')
 
-### 4aG if features vary across run, split pretrain.yml into several files ####
+###X 4aG if features vary across run, split pretrain.yml into several files ####
 
 if(exists('variable_features')){
     for(rd in rundirs){
@@ -2706,7 +2706,7 @@ if(exists('variable_features')){
     file.remove(file.path(rangefile_base, 'pretrain.yml')) #pretty sure moving this before the next bracket was right
 }
 
-### 4aH [OPTIONAL, uncomment] ensure TOMB isn't sneaking into the test set ####
+###X 4aH [OPTIONAL, uncomment] ensure TOMB isn't sneaking into the test set ####
 
 #only set up for generalist atm
 
@@ -2743,7 +2743,7 @@ for(rd in rundirs){
     }, silent = TRUE)
 }
 
-### 4aJ [OPTIONAL, uncomment] protect last x years of eval data as a hold-out set ####
+###X 4aJ [OPTIONAL, uncomment] protect last x years of eval data as a hold-out set ####
 
 # testrng_path = file.path(runset_parent_dir, 'finetune_test_ranges.csv')
 # if(file.exists(testrng_path)){
@@ -2776,7 +2776,7 @@ if(! is.na(addtl_config_list$nhm_lineup) && addtl_config_list$nhm_lineup == 2){
     }
 }
 
-### 4aL [NHM] ensure that finetune params inherit properly from pretrain for NHM runs ####
+###X 4aL [NHM] ensure that finetune params inherit properly from pretrain for NHM runs ####
 
 if(! is.na(addtl_config_list$nhm_lineup) && addtl_config_list$nhm_lineup == 2){
 
@@ -2795,7 +2795,7 @@ if(! is.na(addtl_config_list$nhm_lineup) && addtl_config_list$nhm_lineup == 2){
     }
 }
 
-### 4aM [AS-NEEDED; uncomment] add test metrics to configs in run directories ####
+###X 4aM [AS-NEEDED; uncomment] add test metrics to configs in run directories ####
 
 # runs_to_modify <- 1468:1520 #generalist
 # runs_to_modify <- c(1548:1627, 1748:1937) #specialist
@@ -2849,7 +2849,7 @@ for(r in run_seq){
     write_lines(zz, file.path(runset_parent_dir, cfgd_, paste0('continue.txt')))
 }
 
-### 4aN3 [DISABLED] modify some continue train/val dateranges ####
+###X 4aN3 [DISABLED] modify some continue train/val dateranges ####
 
 # for(r in run_seq){
 #
@@ -2869,26 +2869,26 @@ for(r in run_seq){
 #     # write_csv(qqqq, file.path(runset_parent_dir, cfgd_, paste0('test_ranges.csv')))
 # }
 
-###!. 4aN4 remove NHM_upper_ipswich from pgdl run (doesn't have pet and can't add) ####
+###X 4aN4 [DISABLED] remove NHM_upper_ipswich from pgdl run (doesn't have pet and can't add) ####
 
-if(! is.na(addtl_config_list$nhm_lineup) && addtl_config_list$nhm_lineup == 2){
-    for(r in run_seq){
-
-        cfgd_ <- paste0('run', r)
-
-        read_csv(file.path(runset_parent_dir, cfgd_, paste0('continue_train_ranges.csv'))) %>%
-            filter(! grepl('NHM_upper_ipswich', basin_id)) %>%
-            write_csv(file.path(runset_parent_dir, cfgd_, paste0('continue_train_ranges.csv')))
-
-        read_csv(file.path(runset_parent_dir, cfgd_, paste0('continue_validation_ranges.csv'))) %>%
-            filter(! grepl('NHM_upper_ipswich', basin_id)) %>%
-            write_csv(file.path(runset_parent_dir, cfgd_, paste0('continue_validation_ranges.csv')))
-
-        zz = read_lines(file.path(runset_parent_dir, cfgd_, paste0('continue.txt')))
-        zz = grep('NHM_upper_ipswich', zz, value = TRUE, invert = TRUE)
-        write_lines(zz, file.path(runset_parent_dir, cfgd_, paste0('continue.txt')))
-    }
-}
+# if(! is.na(addtl_config_list$nhm_lineup) && addtl_config_list$nhm_lineup == 2){
+#     for(r in run_seq){
+#
+#         cfgd_ <- paste0('run', r)
+#
+#         read_csv(file.path(runset_parent_dir, cfgd_, paste0('continue_train_ranges.csv'))) %>%
+#             filter(! grepl('NHM_upper_ipswich', basin_id)) %>%
+#             write_csv(file.path(runset_parent_dir, cfgd_, paste0('continue_train_ranges.csv')))
+#
+#         read_csv(file.path(runset_parent_dir, cfgd_, paste0('continue_validation_ranges.csv'))) %>%
+#             filter(! grepl('NHM_upper_ipswich', basin_id)) %>%
+#             write_csv(file.path(runset_parent_dir, cfgd_, paste0('continue_validation_ranges.csv')))
+#
+#         zz = read_lines(file.path(runset_parent_dir, cfgd_, paste0('continue.txt')))
+#         zz = grep('NHM_upper_ipswich', zz, value = TRUE, invert = TRUE)
+#         write_lines(zz, file.path(runset_parent_dir, cfgd_, paste0('continue.txt')))
+#     }
+# }
 
 ### 4aO [REQUIRES INPUT, NON-GENERALIST, uncomment] inherit params from best models by site ####
 
@@ -2944,7 +2944,7 @@ if(! is.na(addtl_config_list$nhm_lineup) && addtl_config_list$nhm_lineup == 2){
 #     write_lines(xx2, file.path(runset_parent_dir, cfgd_, paste0('finetune', r, '.yml')))
 # }
 
-### 4aP [DISABLED] specialist ensure that finetune train sites are MANUALQ ####
+###X 4aP [DISABLED] specialist ensure that finetune train sites are MANUALQ ####
 
 # for(r in run_seq){
 #
@@ -2963,7 +2963,7 @@ if(! is.na(addtl_config_list$nhm_lineup) && addtl_config_list$nhm_lineup == 2){
 #     write_lines(zz, file.path(runset_parent_dir, cfgd_, paste0('finetune_special.txt')))
 # }
 
-### 4aQ [DISABLED] specialist set train/val/test ranges for e.g. MANQ train MANQ test ####
+###X 4aQ [DISABLED] specialist set train/val/test ranges for e.g. MANQ train MANQ test ####
 
 # for(r in run_seq){
 #
@@ -3043,7 +3043,8 @@ for(r in run_seq){
     file.remove(rm_files)
 }
 
-runref = read_lines('~/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runlists/generalist_search.txt') %>%
+# runref = read_lines('~/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runlists/generalist_search.txt') %>%
+runref = read_lines('~/git/macrosheds/qa_experimentation/imputation/src/nh_methods/runlists/nhm_generalist_search.txt') %>%
     sort()
 # grps_tst = c()
 for(i in seq_along(run_seq)){
@@ -3099,7 +3100,7 @@ system(glue("find {runset_parent_dir} -name '*.yml' | xargs sed -e 's|num_worker
 system(glue("find {runset_parent_dir} -name 'pretrained_model_loc.txt' | xargs sed -e 's|{oldpth}|/hpc/home/mjv22/q_sim|g' -i"))
 # find . -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in|/hpc/home/mjv22/q_sim|g' -i
 
-### 4aV [DONE] modify old pretrain configs for DCC ####
+###X 4aV [DONE] modify old pretrain configs for DCC ####
 
 ## generalist/specialist pretrain (no nhm)
 
@@ -3158,7 +3159,9 @@ system(glue("find . -name '*.yml' | xargs sed -E 's|generalist_specialist_pretra
 # py_run_file(pickle_script)
 
 # pickle_script <- '~/git/macrosheds/papers/q_sim/src/lstm_dungeon/dungeon_lvl_2/nh_methods/pickle_all.py'
-system('/home/mike/anaconda3/envs/nh2/bin/python /home/mike/git/macrosheds/papers/q_sim/src/lstm_dungeon/dungeon_lvl_2/pickle_all.py /home/mike/git/macrosheds/qa_experimentation/imputation/src/nh_methods/run_configs/runs_3813-3842')
+system(paste('/home/mike/anaconda3/envs/nh2/bin/python',
+             '/home/mike/git/macrosheds/papers/q_sim/src/lstm_dungeon/dungeon_lvl_2/pickle_all.py',
+             runset_parent_dir))
 
 ### 5 [OPTIONAL] run LSTM ####
 

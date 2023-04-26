@@ -31,6 +31,7 @@ mention:
     added custom eval param (pbias)
     install rgee
         setup config
+    if you run everything from scratch, you'll have to update all the base_run_dirs for finetuning
 
 
 things to hardcode:

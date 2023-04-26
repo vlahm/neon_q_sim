@@ -26,8 +26,7 @@ rundirs = [x for x in cfg_fls if re.match('^run[0-9]+$', x)]
 
 for i in range(len(rundirs)):
     cfg_files2 = os.listdir(Path(curr_config_dir, rundirs[i]))
-    #just remove ^test_ranges_holdout in the line below to re-pickle all csvs
-    to_pickle = [x for x in cfg_files2 if re.search('^test_ranges_holdout\\.csv$', x)]
+    to_pickle = [x for x in cfg_files2 if re.search('\\.csv$', x)]
     for j in range(len(to_pickle)):
         xx = pd.read_csv(Path(curr_config_dir, rundirs[i], to_pickle[j]),
                          dtype={'basin_id': str},
