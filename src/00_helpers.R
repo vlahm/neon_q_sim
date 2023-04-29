@@ -2211,6 +2211,7 @@ build_ensemble_config <- function(sites, runid, param_search, ensemb_n = 30){
         yml <- read_lines(file.path(cfg00, paste0('finetune', r2, '.yml')))
         yml <- sub('seed: [0-9]+', paste('seed:', sample(1:99999, 1)), yml)
         yml <- sub(cfg00_, cfgnew_, yml)
+        yml <- grep('base_run_dir', yml, value = TRUE, invert = TRUE)
         lapply(run_seq, function(x){
             out <- sub(runid2, paste0('run', x), yml)
             sub('experiment_name: finetune[0-9]+',
@@ -2329,39 +2330,36 @@ get_osm_streams <- function(extent_raster, outfile = NULL){
     }
 }
 
-locate_test_results <- function(nh_dir, runid){
+locate_test_results <- function(runid, strtg, loc){
 
-    run_dirs <- list.files(nh_dir)
+    phase = ifelse(strtg == 'specialist', 'finetune', 'run')
 
-    rundir <- grep(paste0('^finetune', runid, '_'), run_dirs, value = TRUE)
+    run_dirs <- list.files(loc)
+
+    rundir <- grep(paste0('^', phase, runid, '_'), run_dirs, value = TRUE)
     if(length(rundir) > 1){
 
-        warning('multiple finetune dirs')
+        warning('multiple ', phase, ' dirs found')
         return()
 
     } else if(length(rundir) == 0){
 
-        rundir <- grep(paste0('^run', runid, '_'), run_dirs, value = TRUE)
-        if(length(rundir) != 1){
-
-            warning('0 or multiple run dirs')
-            return()
-
-        }
+        warning('no ', phase, ' dirs found')
+        return()
     }
 
-    testdir <- file.path('test', list.files(file.path(nh_dir, rundir, 'test')))
+    testdir <- file.path('test', list.files(file.path(loc, rundir, 'test')))
     if(length(testdir) != 1){
         warning('0 or multiple test dirs')
         return()
     }
 
-    res <- file.path(nh_dir, rundir, testdir, 'test_results.p')
+    res <- file.path(loc, rundir, testdir, 'test_results.p')
 
     return(res)
 }
 
-retrieve_test_results <- function(runids){
+retrieve_test_results <- function(runids, strategy, loc = nh_dir){
 
     nse_out <- kge_out <-
         matrix(NA_real_,
@@ -2371,7 +2369,7 @@ retrieve_test_results <- function(runids){
 
     for(i in seq_along(runids)){
 
-        td <- try(locate_test_results(nh_dir, runids[i]), silent = TRUE)
+        td <- try(locate_test_results(runids[i], strtg = strategy, loc = loc), silent = TRUE)
         if(inherits(td, 'try-error') || is.null(td)) next
         # write_lines(td, '/tmp/rundirs.txt', append = T)
 
@@ -2526,154 +2524,46 @@ approxjoin_datetime <- function(x,
                                 rollmax = '7:30',
                                 keep_datetimes_from = 'x',
                                 indices_only = FALSE){
-    #direction = 'forward'){
 
-    #x and y: macrosheds standard tibbles with only one site_code,
-    #   which must be the same in x and y. Nonstandard tibbles may also work,
-    #   so long as they have datetime columns, but the only case where we need
-    #   this for other tibbles is inside precip_pchem_pflux_idw, in which case
-    #   indices_only == TRUE, so it's not really set up for general-purpose joining
-    #rollmax: the maximum snap time for matching elements of x and y.
-    #   either '7:30' for continuous data or '12:00:00' for grab data
-    #direction [REMOVED]: either 'forward', meaning elements of x will be rolled forward
-    #   in time to match the next y, or 'backward', meaning elements of
-    #   x will be rolled back in time to reach the previous y
+    #x and y: data.frames with datetime and val columns. may have others, but they will be dropped.
+    #rollmax: the maximum snap duration for matching elements of x and y. Must
+    #   be a string of the form "HH:MM:SS"
     #keep_datetimes_from: string. either 'x' or 'y'. the datetime column from
     #   the corresponding tibble will be kept, and the other will be dropped
     #indices_only: logical. if TRUE, a join is not performed. rather,
     #   the matching indices from each tibble are returned as a named list of vectors..
 
-    #good datasets for testing this function:
-    # x <- tribble(
-    #     ~datetime, ~site_code, ~var, ~val, ~ms_status, ~ms_interp,
-    #     '1968-10-09 04:42:00', 'GSWS10', 'GN_alk', set_errors(27.75, 1), 0, 0,
-    #     '1968-10-09 04:44:00', 'GSWS10', 'GN_alk', set_errors(21.29, 1), 0, 0,
-    #     '1968-10-09 04:47:00', 'GSWS10', 'GN_alk', set_errors(21.29, 1), 0, 0,
-    #     '1968-10-09 04:59:59', 'GSWS10', 'GN_alk', set_errors(16.04, 1), 0, 0,
-    #     '1968-10-09 05:15:01', 'GSWS10', 'GN_alk', set_errors(17.21, 1), 1, 0,
-    #     '1968-10-09 05:30:59', 'GSWS10', 'GN_alk', set_errors(16.50, 1), 0, 0) %>%
-    # mutate(datetime = as.POSIXct(datetime, tz = 'UTC'))
-    # y <- tribble(
-    #     ~datetime, ~site_code, ~var, ~val, ~ms_status, ~ms_interp,
-    #     '1968-10-09 04:00:00', 'GSWS10', 'GN_alk', set_errors(1.009, 1), 1, 0,
-    #     '1968-10-09 04:15:00', 'GSWS10', 'GN_alk', set_errors(2.009, 1), 1, 1,
-    #     '1968-10-09 04:30:00', 'GSWS10', 'GN_alk', set_errors(3.009, 1), 1, 1,
-    #     '1968-10-09 04:45:00', 'GSWS10', 'GN_alk', set_errors(4.009, 1), 1, 1,
-    #     '1968-10-09 05:00:00', 'GSWS10', 'GN_alk', set_errors(5.009, 1), 1, 1,
-    #     '1968-10-09 05:15:00', 'GSWS10', 'GN_alk', set_errors(6.009, 1), 1, 1) %>%
-    #     mutate(datetime = as.POSIXct(datetime, tz = 'UTC'))
-
     #tests
-    if('site_code' %in% colnames(x) && length(unique(x$site_code)) > 1){
-        stop('Only one site_code allowed in x at the moment')
-    }
-    if('var' %in% colnames(x) && length(unique(drop_var_prefix(x$var))) > 1){
-        stop('Only one var allowed in x at the moment (not including prefix)')
-    }
-    if('site_code' %in% colnames(y) && length(unique(y$site_code)) > 1){
-        stop('Only one site_code allowed in y at the moment')
-    }
-    if('var' %in% colnames(y) && length(unique(drop_var_prefix(y$var))) > 1){
-        stop('Only one var allowed in y at the moment (not including prefix)')
-    }
-    if('site_code' %in% colnames(x) &&
-       'site_code' %in% colnames(y) &&
-       x$site_code[1] != y$site_code[1]) stop('x and y site_code must be the same')
-    if(! rollmax %in% c('7:30', '12:00:00')) stop('rollmax must be "7:30" or "12:00:00"')
-    # if(! direction %in% c('forward', 'backward')) stop('direction must be "forward" or "backward"')
     if(! keep_datetimes_from %in% c('x', 'y')) stop('keep_datetimes_from must be "x" or "y"')
     if(! 'datetime' %in% colnames(x) || ! 'datetime' %in% colnames(y)){
         stop('both x and y must have "datetime" columns containing POSIXct values')
     }
     if(! is.logical(indices_only)) stop('indices_only must be a logical')
-
-    #deal with the case of x or y being a specialized "flow" tibble
-    # x_is_flowtibble <- y_is_flowtibble <- FALSE
-    # if('flow' %in% colnames(x)) x_is_flowtibble <- TRUE
-    # if('flow' %in% colnames(y)) y_is_flowtibble <- TRUE
-    # if(x_is_flowtibble && ! y_is_flowtibble){
-    #     varname <- y$var[1]
-    #     y$var = NULL
-    # } else if(y_is_flowtibble && ! x_is_flowtibble){
-    #     varname <- x$var[1]
-    #     x$var = NULL
-    # } else if(! x_is_flowtibble && ! y_is_flowtibble){
-    #     varname <- x$var[1]
-    #     x$var = NULL
-    #     y$var = NULL
-    # } else {
-    #     stop('x and y are both "flow" tibbles. There should be no need for this')
-    # }
-    # if(x_is_flowtibble) x <- rename(x, val = flow)
-    # if(y_is_flowtibble) y <- rename(y, val = flow)
-
-    #data.table doesn't work with the errors package, so error needs
-    #to be separated into its own column. also give same-name columns suffixes
-
-    if('val' %in% colnames(x)){
-
-        x <- x %>%
-            # mutate(err = errors::errors(val),
-            #        val = errors::drop_errors(val)) %>%
-            rename_with(.fn = ~paste0(., '_x'),
-                        .cols = everything()) %>%
-            data.table::as.data.table()
-
-        y <- y %>%
-            # mutate(err = errors::errors(val),
-            #        val = errors::drop_errors(val)) %>%
-            rename_with(.fn = ~paste0(., '_y'),
-                        .cols = everything()) %>%
-            data.table::as.data.table()
-
-    } else {
-
-        if(indices_only){
-            x <- rename(x, datetime_x = datetime) %>%
-                # mutate(across(where(~inherits(., 'errors')),
-                #               ~errors::drop_errors(.))) %>%
-                data.table::as.data.table()
-
-            y <- rename(y, datetime_y = datetime) %>%
-                # mutate(across(where(~inherits(., 'errors')),
-                #               ~errors::drop_errors(.))) %>%
-                data.table::as.data.table()
-        } else {
-            stop('this case not yet handled')
-        }
-
+    if(! grepl('[0-9]{2}:[0-9]{2}:[0-9]{2}', rollmax)){
+        stop('rollmax must be a string of the form "HH:MM:SS"')
     }
 
-    #alternative implementation of the "on" argument in data.table joins...
-    #probably more flexible, so leaving it here in case we need to do something crazy
-    # data.table::setkeyv(x, 'datetime')
-    # data.table::setkeyv(y, 'datetime')
+    x <- x %>%
+        rename_with(.fn = ~paste0(., '_x'),
+                    .cols = everything()) %>%
+        data.table::as.data.table()
+
+    y <- y %>%
+        rename_with(.fn = ~paste0(., '_y'),
+                    .cols = everything()) %>%
+        data.table::as.data.table()
 
     #convert the desired maximum roll distance from string to integer seconds
-    rollmax <- ifelse(test = rollmax == '7:30',
-                      yes = 7 * 60 + 30,
-                      no = 12 * 60 * 60)
-
-    #leaving this here in case the nearest neighbor join implemented below is too
-    #slow. then we can fall back to a basic rolling join with a maximum distance
-    # rollmax <- ifelse(test = direction == 'forward',
-    #                   yes = -rollmax,
-    #                   no = rollmax)
-    #rollends will move the first/last value of x in the opposite `direction` if necessary
-    # joined <- y[x, on = 'datetime', roll = rollmax, rollends = c(TRUE, TRUE)]
+    h_m_s <- as.numeric(str_match(rollmax, '([0-9]{2}):([0-9]{2}):([0-9]{2})')[,2:4])
+    h_ <- h_m_s[1] * 60 * 60
+    m_ <- h_m_s[2] * 60
+    s_ <- h_m_s[3]
+    rollmax <- h_ + m_ + s_
 
     #create columns in x that represent the snapping window around each datetime
     x[, `:=` (datetime_min = datetime_x - rollmax,
               datetime_max = datetime_x + rollmax)]
     y[, `:=` (datetime_y_orig = datetime_y)] #datetime col will be dropped from y
-
-    # if(indices_only){
-    #     y_indices <- y[x,
-    #                    on = .(datetime_y <= datetime_max,
-    #                           datetime_y >= datetime_min),
-    #                    which = TRUE]
-    #     return(y_indices)
-    # }
 
     #join x rows to y if y's datetime falls within the x range
     joined <- y[x, on = .(datetime_y <= datetime_max,
@@ -2701,36 +2591,7 @@ approxjoin_datetime <- function(x,
         data.table::setnames(joined, 'datetime_y_orig', 'datetime')
     }
 
-    #restore error objects, var column, original column names (with suffixes).
-    #original column order
-    # joined <- tibble::as_tibble(joined) %>%
-    #     mutate(val_x = errors::set_errors(val_x, err_x),
-    #            val_y = errors::set_errors(val_y, err_y)) %>%
-    #     dplyr::select(-err_x, -err_y)
-    # mutate(var = !!varname)
-
-    # if(x_is_flowtibble) joined <- rename(joined,
-    #                                      flow = val_x,
-    #                                      ms_status_flow = ms_status_x,
-    #                                      ms_interp_flow = ms_interp_x)
-    # if(y_is_flowtibble) joined <- rename(joined,
-    #                                      flow = val_y,
-    #                                      ms_status_flow = ms_status_y,
-    #                                      ms_interp_flow = ms_interp_y)
-
-    # if(! sum(grepl('^val_[xy]$', colnames(joined))) > 1){
-    #     joined <- rename(joined, val = matches('^val_[xy]$'))
-    # }
-
-    joined <- dplyr::select(joined,
-                            datetime,
-                            # matches('^val_?[xy]?$'),
-                            # any_of('flow'),
-                            starts_with('site_code'),
-                            any_of(c(starts_with('var_'), matches('^var$'))),
-                            any_of(c(starts_with('val_'), matches('^val$'))),
-                            starts_with('ms_status_'),
-                            starts_with('ms_interp_'))
+    joined <- dplyr::select(joined, datetime, val_x, val_y)
 
     return(joined)
 }

@@ -5,6 +5,7 @@
 library(tidyverse)
 library(reticulate)
 library(glue)
+library(hydroGOF)
 #four more packages loaded in section 6
 
 #NOTE: IF YOU ARE NOT USING OUR BUNDLED INPUT DATA, THIS FILE REQUIRES EDITS,
@@ -99,6 +100,7 @@ skilled <- bind_rows(
 
 # write_csv(skilled, '~/Desktop/dcc_runs/skilled_searches.csv')
 # skilled = read_csv('~/Desktop/dcc_runs/skilled_searches.csv')
+distinct(skilled, run, .keep_all = T)
 
 # 4. build ensemble configs ####
 
@@ -113,57 +115,141 @@ for(run in unique_runs){
 
 # 5. run ensembles for potentially skilled models (also several days apiece!) ####
 
-ensembles <- list(
-
-    #generalists
-    TECR = list(2423:2452),
-    BIGC = list(2453:2482),
-    MART = list(2453:2482), #same ensemble as BIGC
-    LECO = list(2453:2482), #same ensemble as BIGC
-    WALK = list(2483:2512),
-    MCRA = list(2513:2542), #
-    COMO = list(2543:2572),
-    HOPB = list(2573:2602),
-
-    #PGDL specialist
-    # FLNT = list(2603:2632), #wasn't actually using ms NHM for continue, but has legit validation continue tb
-    FLNT = list(2633:2662),
-
-    #specialists
-    # HOPB = list(2793:2822), #used wrong hyperparams, but interesting results
-    HOPB = list(2823:2852),
-    WALK = list(2853:2882),
-    MCRA = list(2883:2912),
-    COMO = list(2913:2942),
-    BIGC = list(2943:2972),
-    MART = list(2973:3002)
+ensembles_gen <- list(
+    TECR = 4113:4142, #same ensemble as FLNT
+    FLNT = 4113:4142, #same ensemble as TECR
+    HOPB = 4173:4202,
+    MART = 4293:4322,
+    MCRA = 4323:4352, #same ensemble as BLDE and MCRA
+    BLDE = 4323:4352, #
+    MAYF = 4323:4352, #
+    LECO = 4473:4502,
+    WALK = 4623:4652
 )
 
-run_lstm('generalist', ensembles$TECR[[1]])
-run_lstm('generalist', ensembles$BIGC[[1]])
-run_lstm('generalist', ensembles$WALK[[1]])
-run_lstm('generalist', ensembles$MCRA[[1]])
-run_lstm('generalist', ensembles$COMO[[1]])
-run_lstm('generalist', ensembles$HOPB[[1]])
-run_lstm('pgdl', ensembles$FLNT[[1]])
-# run_lstm('specialist', ensembles$BLDE[[1]])
+ensembles_spec <- list(
+    BIGC = 4143:4172,
+    LEWI = 4203:4232,
+    BLUE = 4383:4412,
+    BLWA = 4413:4442,
+    CUPE = 4443:4472,
+    CARI = 4563:4592
+)
 
-COMPLETE
+ensembles_gen_pgdl <- list(
+    WLOU = 4232:4262,
+    KING = 4263:4292,
+    MCDI = 4353:4382,
+    COMO = 4503:4532,
+    REDB = 4533:4562,
+    POSE = 4593:4622
+)
+
+for(ensemb_site in ensembles_gen){
+    run_lstm('generalist', ensemb_site, ensemble = TRUE)
+}
+for(ensemb_site in ensembles_spec){
+    run_lstm('specialist', ensemb_site, ensemble = TRUE)
+}
+for(ensemb_site in ensembles_gen_pgdl){
+    run_lstm('generalist', ensemb_site, ensemble = TRUE)
+}
+# run_lstm('generalist', ensembles_gen$TECR, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$FLNT, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$HOPB, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$MART, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$MCRA, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$BLDE, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$MAYF, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$LECO, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$WALK, ensemble = TRUE)
+
+# run_lstm('specialist', ensembles_gen$BIGC, ensemble = TRUE)
+# run_lstm('specialist', ensembles_gen$LEWI, ensemble = TRUE)
+# run_lstm('specialist', ensembles_gen$BLUE, ensemble = TRUE)
+# run_lstm('specialist', ensembles_gen$BLWA, ensemble = TRUE)
+# run_lstm('specialist', ensembles_gen$CUPE, ensemble = TRUE)
+# run_lstm('specialist', ensembles_gen$CARI, ensemble = TRUE)
+
+# run_lstm('generalist', ensembles_gen$WLOU, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$KING, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$MCDI, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$COMO, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$REDB, ensemble = TRUE)
+# run_lstm('generalist', ensembles_gen$POSE, ensemble = TRUE)
 
 # 6. gather results of ensembles ####
 
+# system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_data|PLACEHOLDER3|g' -i"))
+# system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_runs|PLACEHOLDER2|g' -i"))
+# system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/runs|PLACEHOLDER2|g' -i"))
+# system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_configs|PLACEHOLDER|g' -i"))
+#
+# cfgs <- list.files('out/ergh', pattern = 'config.yml', recursive = TRUE, full.names = TRUE)
+# for(cfg_ in cfgs){
+#     read_file(cfg_) %>%
+#         str_replace_all('PLACEHOLDER3', datadir) %>%
+#         str_replace_all('PLACEHOLDER2', rundir) %>%
+#         str_replace_all('PLACEHOLDER', confdir) %>%
+#         write_file(cfg_)
+# }
+
+for(ensemb_site in ensembles_gen){
+    eval_lstms('generalist', ensemb_site)
+}
+for(ensemb_site in ensembles_spec){
+    eval_lstms('specialist', ensemb_site)
+}
+for(ensemb_site in ensembles_gen_pgdl){
+    eval_lstms('generalist', ensemb_site)
+}
+# eval_lstms('generalist', ensembles_gen$FLNT)
+# eval_lstms('generalist', ensembles_gen$HOPB)
+# eval_lstms('generalist', ensembles_gen$MART)
+# eval_lstms('generalist', ensembles_gen$MCRA)
+# eval_lstms('generalist', ensembles_gen$BLDE)
+# eval_lstms('generalist', ensembles_gen$MAYF)
+# eval_lstms('generalist', ensembles_gen$LECO)
+# eval_lstms('generalist', ensembles_gen$WALK)
+
+# eval_lstms('specialist', ensembles_spec$BIGC)
+# eval_lstms('specialist', ensembles_spec$LEWI)
+# eval_lstms('specialist', ensembles_spec$BLUE)
+# eval_lstms('specialist', ensembles_spec$BLWA)
+# eval_lstms('specialist', ensembles_spec$CUPE)
+# eval_lstms('specialist', ensembles_spec$CARI)
+
+# eval_lstms('generalist', ensembles_gen_pgdl$WLOU)
+# eval_lstms('generalist', ensembles_gen_pgdl$KING)
+# eval_lstms('generalist', ensembles_gen_pgdl$MCDI)
+# eval_lstms('generalist', ensembles_gen_pgdl$COMO)
+# eval_lstms('generalist', ensembles_gen_pgdl$REDB)
+# eval_lstms('generalist', ensembles_gen_pgdl$POSE)
+
 metrics <- matrix(
-    NA, nrow = length(ensembles), ncol = 6,
+    nrow = length(ensembles_gen) + length(ensembles_spec) + length(ensembles_gen_pgdl),
+    ncol = 3, data = NA_real_,
     dimnames = list(
-        names(ensembles),
-        c('NSE_holdout', 'KGE_holdout', 'pbias_holdout', 'NSE', 'KGE', 'pbias')
+        c(names(ensembles_gen), names(ensembles_spec), names(ensembles_gen_pgdl)),
+        c('NSE', 'KGE', 'pbias')
     )
 )
 pred_q <- list()
-for(i in seq_along(ensembles)){
+for(i in seq_len(nrow(metrics))){
 
-    neon_site <- names(ensembles)[i]
-    runlist <- unlist(ensembles[[i]])
+    neon_site <- rownames(metrics)[i]
+    if(neon_site %in% names(ensembles_gen)){
+        runlist <- ensembles_gen[[neon_site]]
+        phase <- 'run'
+    } else if(neon_site %in% names(ensembles_spec)){
+        runlist <- ensembles_spec[[neon_site]]
+        phase <- 'finetune'
+    } else if(neon_site %in% names(ensembles_gen_pgdl)){
+        runlist <- ensembles_gen_pgdl[[neon_site]]
+        phase <- 'run'
+    } else {
+        stop('update')
+    }
 
     neon_q_manual <- read_csv(glue('in/NEON/neon_field_Q/{neon_site}.csv')) %>%
         mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
@@ -171,8 +257,8 @@ for(i in seq_along(ensembles)){
         distinct(datetime, .keep_all = TRUE) %>%
         mutate(date = as.Date(datetime))
 
-    rundirs <- list.files('out/lstm_runs/', pattern = '^run') %>%
-        str_match(glue('run(?:{rl})_[0-9_]+', rl = paste(runlist, collapse = '|'))) %>%
+    rundirs <- list.files('out/lstm_runs/', pattern = paste0('^', phase)) %>%
+        str_match(glue('{phase}(?:{rl})_[0-9_]+', rl = paste(runlist, collapse = '|'))) %>%
         {.[, 1]} %>%
         na.omit() %>%
         as.vector()

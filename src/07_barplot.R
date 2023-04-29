@@ -7,6 +7,8 @@ library(macrosheds)
 library(glue)
 library(reticulate)
 library(data.table)
+library(lubridate)
+library(hydroGOF)
 
 #python interaction required for loading lstm results.
 #see step 2 in src/lstm_dungeon/README.txt
@@ -30,13 +32,13 @@ if(! dir.exists('out/lstm_runs')) stop("you need to run src/04_run_lstms.R. It w
 
 nh_dir <- 'out/lstm_runs'
 
-# specify run IDs for all tested generalist models
-generalist_runids <- 1468:1520
-tecr_runids <- 1718:1747
-bigc_runids <-
-# specify run IDs for replicates of best model for each specialist type
-specialist_runids <- c(2293:2422)
-pgdl_runids <- 2248:2292
+# # specify run IDs for all tested generalist models
+# generalist_runids <- 1468:1520
+# tecr_runids <- 1718:1747
+# bigc_runids <-
+# # specify run IDs for replicates of best model for each specialist type
+# specialist_runids <- c(2293:2422)
+# pgdl_runids <- 2248:2292
 
 pal <- c('black', rev(viridis::viridis(5, begin = 0.2, end = 1)))
 
@@ -46,10 +48,12 @@ neon_sites <- read_csv('in/NEON/neon_site_info.csv') %>%
 
 #initialize results data.frame
 plotd <- matrix(
-    NA_real_, nrow = 27, ncol = 7,
+    NA_real_, nrow = 27, ncol = 11,
     dimnames = list(
         NULL,
-        c('site', 'nse_neon', 'kge_neon', 'nse_lm', 'nse_lm_scaled', 'kge_lm', 'kge_lm_scaled')
+        c('site', 'nse_neon_min', 'nse_neon_overall', 'nse_neon_max',
+          'kge_neon_min', 'kge_neon_overall', 'kge_neon_max',
+          'nse_lm', 'nse_lm_scaled', 'kge_lm', 'kge_lm_scaled')
         # c('site', 'nse_lm', 'nse_lm_scaled', 'nse_gen', 'nse_spec', 'nse_pgdl',
         #   'kge_lm', 'kge_lm_scaled', 'kge_gen', 'kge_spec', 'kge_pgdl')
     )
@@ -74,11 +78,14 @@ for(s in plotd$site){
 
 ## 3. compile LSTM results ####
 
-gen_res <- retrieve_test_results(generalist_runids)
-spec_res <- retrieve_test_results(specialist_runids)
-pgdl_res <- retrieve_test_results(pgdl_runids)
+gen_res <- retrieve_test_results(generalist_runids, strategy = 'generalist')
 
-tecr_res <- retrieve_test_results(tecr_runids)
+
+# gen_res <- retrieve_test_results(generalist_runids)
+# spec_res <- retrieve_test_results(specialist_runids)
+# pgdl_res <- retrieve_test_results(pgdl_runids)
+#
+# tecr_res <- retrieve_test_results(tecr_runids)
 
 # c('site', 'nse_lm', 'nse_lm_scaled', 'nse_gen', 'nse_spec', 'nse_pgdl',
 #   'kge_lm', 'kge_lm_scaled', 'kge_gen', 'kge_spec', 'kge_pgdl')
@@ -108,42 +115,90 @@ for(s in plotd$site){
         filter(! is.na(discharge)) %>%
         select(-site_code)
 
+    # print(mode_interval_dt(neon_q_auto$datetime))
+
     if(s == 'TOMB'){
 
         cmp <- approxjoin_datetime(
-                x = mutate(neon_q_manual, site_code = s, var = 'discharge') %>%
-                    rename(val = discharge),
-                y = mutate(neon_q_auto, site_code = s, var = 'discharge') %>%
-                    rename(val = discharge),
-                rollmax = '12:00:00'
+                x = rename(neon_q_manual, val = discharge),
+                y = rename(neon_q_auto, val = discharge),
+                rollmax = '00:30:00'
             ) %>%
             as_tibble() %>%
             select(datetime, discharge.man = val_x, discharge.aut = val_y)
 
     } else {
 
-        cmp <- left_join(neon_q_manual, neon_q_auto, by = 'datetime', suffix = c('.man', '.aut'))
+        cmp <- approxjoin_datetime(
+                x = rename(neon_q_manual, val = discharge),
+                y = rename(neon_q_auto, val = discharge),
+                rollmax = '00:02:30'
+            ) %>%
+            as_tibble() %>%
+            select(datetime, discharge.man = val_x, discharge.aut = val_y)
+
+    # } else {
+    #     cmp <- left_join(neon_q_manual, neon_q_auto, by = 'datetime', suffix = c('.man', '.aut'))
     }
 
-    plotd[i, 'nse_neon'] <- hydroGOF::NSE(cmp$discharge.aut, cmp$discharge.man)
-    plotd[i, 'kge_neon'] <- hydroGOF::KGE(cmp$discharge.aut, cmp$discharge.man)
+    plotd[i, 'nse_neon_overall'] <- NSE(cmp$discharge.aut, cmp$discharge.man)
+    plotd[i, 'kge_neon_overall'] <- KGE(cmp$discharge.aut, cmp$discharge.man)
+
+    cmp_splt <- cmp %>%
+        mutate(wateryr = year(datetime),
+               wateryr = ifelse(month(datetime) >= 10, wateryr + 1, wateryr)) %>%
+        group_by(wateryr) %>%
+        group_split()
+
+    if(s == 'OKSR'){
+        cmp_splt <- purrr::keep(cmp_splt, ~length(na.omit(.$discharge.aut)) >= 2)
+    } else {
+        cmp_splt <- purrr::keep(cmp_splt, ~length(na.omit(.$discharge.aut)) >= 5)
+    }
+
+    # ref <- mean(cmp$discharge.man, na.rm = TRUE)
+    # refsd <- sd(cmp$discharge.man, na.rm = TRUE)
+    # nse_wy <- purrr::map(cmp_splt, ~nse_customref(.$discharge.aut, .$discharge.man,
+    #                                               refmean = ref))
+    # kge_wy <- purrr::map(cmp_splt, ~kge_customref(.$discharge.aut, .$discharge.man,
+    #                                               refmean = ref, refsd = refsd))
+    nse_wy <- purrr::map(cmp_splt, ~NSE(.$discharge.aut, .$discharge.man))
+    kge_wy <- purrr::map(cmp_splt, ~KGE(.$discharge.aut, .$discharge.man))
+
+    plotd[i, 'nse_neon_min'] <- purrr::reduce(nse_wy, min)
+    plotd[i, 'nse_neon_max'] <- purrr::reduce(nse_wy, max)
+    plotd[i, 'kge_neon_min'] <- purrr::reduce(kge_wy, min)
+    plotd[i, 'kge_neon_max'] <- purrr::reduce(kge_wy, max)
 }
 
 ## 5. figure 2 ####
 
 #fig Sx (same as fig 2, but showing NSE)
 
-plotd <- select(plotd, site, nse_neon, kge_neon, nse_lm, kge_lm, nse_lm_scaled,
-                kge_lm_scaled, nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl,
-                kge_pgdl)
+# plotd$nse_gen = runif(27,0,1)
+# plotd$kge_gen = runif(27,0,1)
+# plotd$nse_spec = runif(27,0,1)
+# plotd$kge_spec = runif(27,0,1)
+# plotd$nse_pgdl = runif(27,0,1)
+# plotd$kge_pgdl = runif(27,0,1)
+# plotd <- select(plotd, site, nse_neon, kge_neon, nse_lm, kge_lm, nse_lm_scaled,
+#                 kge_lm_scaled, nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl,
+#                 kge_pgdl)
+plotd <- select(plotd, site,
+                nse_neon_min, nse_neon_overall, nse_neon_max,
+                kge_neon_min, kge_neon_overall, kge_neon_max,
+                nse_lm, kge_lm, nse_lm_scaled, kge_lm_scaled,
+                nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl, kge_pgdl)
+
 
 plotd_nse <- select(plotd, -contains('kge'))
-plotd_nse$rowmax <- apply(select(plotd_nse, -site), 1, max, na.rm = TRUE)
-plotd_nse <- arrange(plotd_nse, desc(nse_neon))
+plotd_nse$rowmax <- apply(select(plotd_nse, -site, -ends_with('max')), 1, max, na.rm = TRUE)
+plotd_nse <- arrange(plotd_nse, desc(nse_neon_overall))
 # plotd_nse <- arrange(plotd_nse, desc(rowmax))
-plotd_m <- as.matrix(select(plotd_nse, -site, -rowmax))
+plotd_m <- as.matrix(select(plotd_nse, -site, -ends_with(c('max', 'min'))))
 plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
 plotd_m <- t(plotd_m)
+plotd_nse <- mutate(plotd_nse, nse_neon_min = ifelse(nse_neon_min < -0.05, -0.05, nse_neon_min))
 rownames(plotd_m) <- c('Published', 'Linreg', 'Linreg scaled', 'LSTM generalist', 'LSTM specialist', 'LSTM process-guided')
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
@@ -161,6 +216,11 @@ barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_nse$site,
         legend.text = TRUE, border = 'transparent', yaxt = 'n',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
                            xpd = NA, ncol = 3))
+minmax_seq <- seq(1.55, 245, by = 7)
+for(i in 1:27){
+    points(minmax_seq[i], plotd_nse$nse_neon_max[i], col = 'black', bg = 'white', xpd = NA, pch = 24, cex = 0.8)
+    points(minmax_seq[i], plotd_nse$nse_neon_min[i], col = 'black', bg = 'white', xpd = NA, pch = 25, cex = 0.8)
+}
 mtext('NEON stream/river site', 1, 3.8, font = 2)
 mtext('Nash-Sutcliffe Efficiency', 2, 1, font = 2)
 axis(2, seq(0, 1, 0.1), line = -0.9, tcl = -0.3, padj = 1)
@@ -169,11 +229,12 @@ dev.off()
 #actual fig 2
 
 plotd_kge <- select(plotd, -contains('nse'))
-plotd_kge$rowmax <- apply(select(plotd_kge, -site), 1, max, na.rm = TRUE)
-plotd_kge <- arrange(plotd_kge, desc(kge_neon))
-plotd_m <- as.matrix(select(plotd_kge, -site, -rowmax))
+plotd_kge$rowmax <- apply(select(plotd_kge, -site, -ends_with('max')), 1, max, na.rm = TRUE)
+plotd_kge <- arrange(plotd_kge, desc(kge_neon_overall))
+plotd_m <- as.matrix(select(plotd_kge, -site, -ends_with(c('max', 'min'))))
 plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
 plotd_m <- t(plotd_m)
+plotd_kge <- mutate(plotd_kge, kge_neon_min = ifelse(kge_neon_min < -0.05, -0.05, kge_neon_min))
 rownames(plotd_m) <- c('Published', 'Linreg', 'Linreg scaled', 'LSTM generalist', 'LSTM specialist', 'LSTM process-guided')
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
@@ -191,6 +252,11 @@ barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_kge$site,
         legend.text = TRUE, border = 'transparent', yaxt = 'n',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
                            xpd = NA, ncol = 3))
+minmax_seq <- seq(1.55, 245, by = 7)
+for(i in 1:27){
+    points(minmax_seq[i], plotd_kge$kge_neon_max[i], col = 'black', bg = 'white', xpd = NA, pch = 24, cex = 0.8)
+    points(minmax_seq[i], plotd_kge$kge_neon_min[i], col = 'black', bg = 'white', xpd = NA, pch = 25, cex = 0.8)
+}
 mtext('NEON stream/river Site', 1, 3.8, font = 2)
 mtext('Kling-Gupta Efficiency', 2, 1, font = 2)
 axis(2, seq(0, 1, 0.1), line = -0.9, tcl = -0.3, padj = 1)

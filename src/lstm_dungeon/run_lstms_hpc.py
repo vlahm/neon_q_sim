@@ -44,12 +44,9 @@ runid = str(run)
 
 config_dir = Path(confdir, config_dir_or_dirs.stem, 'run' + runid)
 
-results_ft1 = None
 if IS_GENERALIST or ENSEMBLE:
 
     config_file1 = Path(config_dir, 'continue' + runid + '.yml')
-    with open(config_file1, 'r') as fp:
-        config_deets1 = yaml.safe_load(fp)
 
     finetune(config_file=config_file1)
     results = os.listdir(rundir)
@@ -57,16 +54,12 @@ if IS_GENERALIST or ENSEMBLE:
     if len(finetune1) != 1:
         raise ValueError('need exactly one output directory for ' + str(rundir) + '/run' + runid)
 
-results_ft2 = None
 if not IS_GENERALIST:
 
     config_file2 = Path(config_dir, 'finetune' + runid + '.yml')
-    with open(config_file2, 'r') as fp:
-        config_deets2 = yaml.safe_load(fp)
+    if ENSEMBLE:
+        rundir1 = Path(rundir, finetune1[0])
+        with open(config_file2, 'a') as fp:
+            fp.write(f'base_run_dir: {rundir1}')
 
     finetune(config_file=config_file2)
-    results = os.listdir(rundir)
-    finetune2 = [x for x in results if re.match('finetune' + runid, x)]
-    if len(finetune2) != 1:
-        raise ValueError('need exactly one output directory for ' + str(rundir) + '/finetune' + runid)
-

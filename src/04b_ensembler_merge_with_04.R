@@ -13,7 +13,7 @@
     #CONFIG: find . -name finetune_special.txt -exec rename -f 's/finetune_special.txt/finetune.txt/' {} \;
     #CONFIG: find . -name '*.yml' | xargs sed -e 's/finetune_special/finetune/g' -i
     #RUNS: find . -name 'config.yml' | xargs sed -e 's/finetune_special/finetune/g' -i
-# set save_weights_every: 1 to 1000
+# set save_weights_every: 1 to 10 (this is already fixed locally)
 #leave test dirs? probs.
 #only modify the new ensemble directories as below, then
 #REMOVE ALL non-terminal run files
@@ -52,9 +52,9 @@ for(cfg_ in cfgs){
 
 
 #for dcc runs (change cfg parent dir!)
-system(paste0("find in/lstm_configs/runs_4113-4142 -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_data|/hpc/home/mjv22/q_sim/lstm_data|g' -i"))
-system(paste0("find in/lstm_configs/runs_4113-4142 -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/out/lstm_runs|/hpc/home/mjv22/q_sim/lstm_runs|g' -i"))
-system(paste0("find in/lstm_configs/runs_4113-4142 -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_configs|/hpc/home/mjv22/q_sim/lstm_configs|g' -i"))
+system(paste0("find in/lstm_configs/to_dcc -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_data|/hpc/home/mjv22/q_sim/lstm_data|g' -i"))
+system(paste0("find in/lstm_configs/to_dcc -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/out/lstm_runs|/hpc/home/mjv22/q_sim/lstm_runs|g' -i"))
+system(paste0("find in/lstm_configs/to_dcc -name '*.yml' | xargs sed -e 's|/home/mike/git/macrosheds/papers/q_sim/in/lstm_configs|/hpc/home/mjv22/q_sim/lstm_configs|g' -i"))
 
 
 
