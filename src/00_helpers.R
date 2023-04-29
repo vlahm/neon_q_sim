@@ -2037,11 +2037,15 @@ identify_incomplete_lstms <- function(strategy, runset, rm = FALSE){
                 if(actual_epochs == expected_epochs){
                     dupe_dirs <- dirname(cfg)
                     conclusion <- paste('drop', paste(dupe_dirs[-j], collapse = ', '))
-                    if(rm){
-                        unlink(dupe_dirs[-j], recursive = TRUE)
-                        conclusion <- paste('dropped', paste(dupe_dirs[-j], collapse = ', '))
+                    if(strategy != 'specialist'){
+                        if(rm){
+                            unlink(dupe_dirs[-j], recursive = TRUE)
+                            conclusion <- paste('dropped', paste(dupe_dirs[-j], collapse = ', '))
+                        } else {
+                            print(paste('would remove', dupe_dirs[-j]))
+                        }
                     } else {
-                        print(paste('would remove', dupe_dirs[-j]))
+                        conclusion <- paste0(conclusion, '; not built to auto-rm specialists')
                     }
                     break
                 }
@@ -2119,7 +2123,7 @@ eval_lstms <- function(strategy, runset){
     #runset: a numeric vector of run IDs
 
     phase <- ifelse(strategy == 'generalist', 'run', 'finetune')
-    phase_token <- ifelse(phase == 'run', 'continue', 'finetune')
+    # phase_token <- ifelse(phase == 'run', 'continue', 'finetune')
 
     #adjust test periods
     run_range <- paste(range(runset), collapse = '-')

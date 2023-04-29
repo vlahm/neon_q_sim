@@ -100,7 +100,7 @@ skilled <- bind_rows(
 
 # write_csv(skilled, '~/Desktop/dcc_runs/skilled_searches.csv')
 # skilled = read_csv('~/Desktop/dcc_runs/skilled_searches.csv')
-distinct(skilled, run, .keep_all = T)
+# distinct(skilled, run, .keep_all = T)
 
 # 4. build ensemble configs ####
 
@@ -145,46 +145,65 @@ ensembles_gen_pgdl <- list(
     POSE = 4593:4622
 )
 
-for(ensemb_site in ensembles_gen){
-    run_lstm('generalist', ensemb_site, ensemble = TRUE)
-}
-for(ensemb_site in ensembles_spec){
-    run_lstm('specialist', ensemb_site, ensemble = TRUE)
-}
-for(ensemb_site in ensembles_gen_pgdl){
-    run_lstm('generalist', ensemb_site, ensemble = TRUE)
-}
-# run_lstm('generalist', ensembles_gen$TECR, ensemble = TRUE)
+## probably want to run one at a time
+# for(ensemb_site in ensembles_gen){
+#     run_lstm('generalist', ensemb_site, ensemble = TRUE)
+# }
+# for(ensemb_site in ensembles_spec){
+#     run_lstm('specialist', ensemb_site, ensemble = TRUE)
+# }
+# for(ensemb_site in ensembles_gen_pgdl){
+#     run_lstm('generalist', ensemb_site, ensemble = TRUE)
+# }
+
+run_lstm('generalist', ensembles_gen$TECR, ensemble = TRUE)
 # run_lstm('generalist', ensembles_gen$FLNT, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$HOPB, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$MART, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$MCRA, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$HOPB, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$MART, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$MCRA, ensemble = TRUE)
 # run_lstm('generalist', ensembles_gen$BLDE, ensemble = TRUE)
 # run_lstm('generalist', ensembles_gen$MAYF, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$LECO, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$WALK, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$LECO, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$WALK, ensemble = TRUE)
 
-# run_lstm('specialist', ensembles_gen$BIGC, ensemble = TRUE)
-# run_lstm('specialist', ensembles_gen$LEWI, ensemble = TRUE)
-# run_lstm('specialist', ensembles_gen$BLUE, ensemble = TRUE)
-# run_lstm('specialist', ensembles_gen$BLWA, ensemble = TRUE)
-# run_lstm('specialist', ensembles_gen$CUPE, ensemble = TRUE)
-# run_lstm('specialist', ensembles_gen$CARI, ensemble = TRUE)
+run_lstm('specialist', ensembles_gen$BIGC, ensemble = TRUE)
+run_lstm('specialist', ensembles_gen$LEWI, ensemble = TRUE)
+run_lstm('specialist', ensembles_gen$BLUE, ensemble = TRUE)
+run_lstm('specialist', ensembles_gen$BLWA, ensemble = TRUE)
+run_lstm('specialist', ensembles_gen$CUPE, ensemble = TRUE)
+run_lstm('specialist', ensembles_gen$CARI, ensemble = TRUE)
 
-# run_lstm('generalist', ensembles_gen$WLOU, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$KING, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$MCDI, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$COMO, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$REDB, ensemble = TRUE)
-# run_lstm('generalist', ensembles_gen$POSE, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$WLOU, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$KING, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$MCDI, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$COMO, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$REDB, ensemble = TRUE)
+run_lstm('generalist', ensembles_gen$POSE, ensemble = TRUE)
+
+## you might need to sort out runs that failed due to race conditions
+
+# status_gen <- tibble()
+# for(ensemb_site in ensembles_gen){
+#     status_gen <- bind_rows(status_gen, identify_incomplete_lstms('generalist', ensemb_site))
+# }
+# status_spec <- tibble()
+# for(ensemb_site in ensembles_spec){
+#     status_spec <- bind_rows(status_spec, identify_incomplete_lstms('specialist', ensemb_site))
+# }
+# status_gen_pgdl <- tibble()
+# for(ensemb_site in ensembles_gen_pgdl){
+#     status_gen_pgdl <- bind_rows(status_gen_pgdl, identify_incomplete_lstms('generalist', ensemb_site))
+# }
+
 
 # 6. gather results of ensembles ####
+
+## if you ran ensembles on a cluster, you'll need to adjust paths for your local machine
 
 # system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_data|PLACEHOLDER3|g' -i"))
 # system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_runs|PLACEHOLDER2|g' -i"))
 # system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/runs|PLACEHOLDER2|g' -i"))
 # system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_configs|PLACEHOLDER|g' -i"))
-
 # cfgs <- list.files('out/lstm_runs', pattern = 'config.yml', recursive = TRUE, full.names = TRUE)
 # for(cfg_ in cfgs){
 #     read_file(cfg_) %>%
@@ -193,21 +212,6 @@ for(ensemb_site in ensembles_gen_pgdl){
 #         str_replace_all('PLACEHOLDER', confdir) %>%
 #         write_file(cfg_)
 # }
-
-status_gen <- tibble()
-for(ensemb_site in ensembles_gen){
-    status_gen <- bind_rows(status_gen, identify_incomplete_lstms('generalist', ensemb_site))
-}
-status_spec <- tibble()
-for(ensemb_site in ensembles_spec){
-    status_spec <- bind_rows(status_spec, identify_incomplete_lstms('specialist', ensemb_site))
-}
-status_gen_pgdl <- tibble()
-for(ensemb_site in ensembles_gen_pgdl){
-    status_gen_pgdl <- bind_rows(status_gen_pgdl, identify_incomplete_lstms('generalist', ensemb_site))
-}
-
-##
 
 for(ensemb_site in ensembles_gen){
     eval_lstms('generalist', ensemb_site)
@@ -218,41 +222,35 @@ for(ensemb_site in ensembles_spec){
 for(ensemb_site in ensembles_gen_pgdl){
     eval_lstms('generalist', ensemb_site)
 }
-# eval_lstms('generalist', ensembles_gen$FLNT)
-# eval_lstms('generalist', ensembles_gen$HOPB)
-# eval_lstms('generalist', ensembles_gen$MART)
-# eval_lstms('generalist', ensembles_gen$MCRA)
-# eval_lstms('generalist', ensembles_gen$BLDE)
-# eval_lstms('generalist', ensembles_gen$MAYF)
-# eval_lstms('generalist', ensembles_gen$LECO)
-# eval_lstms('generalist', ensembles_gen$WALK)
 
-# eval_lstms('specialist', ensembles_spec$BIGC)
-# eval_lstms('specialist', ensembles_spec$LEWI)
-# eval_lstms('specialist', ensembles_spec$BLUE)
-# eval_lstms('specialist', ensembles_spec$BLWA)
-# eval_lstms('specialist', ensembles_spec$CUPE)
-# eval_lstms('specialist', ensembles_spec$CARI)
-
-# eval_lstms('generalist', ensembles_gen_pgdl$WLOU)
-# eval_lstms('generalist', ensembles_gen_pgdl$KING)
-# eval_lstms('generalist', ensembles_gen_pgdl$MCDI)
-# eval_lstms('generalist', ensembles_gen_pgdl$COMO)
-# eval_lstms('generalist', ensembles_gen_pgdl$REDB)
-# eval_lstms('generalist', ensembles_gen_pgdl$POSE)
-
-metrics <- matrix(
-    nrow = length(ensembles_gen) + length(ensembles_spec) + length(ensembles_gen_pgdl),
-    ncol = 3, data = NA_real_,
-    dimnames = list(
-        c(names(ensembles_gen), names(ensembles_spec), names(ensembles_gen_pgdl)),
-        c('NSE', 'KGE', 'pbias')
-    )
-)
+# metrics <- matrix(
+#     nrow = length(ensembles_gen) + length(ensembles_spec) + length(ensembles_gen_pgdl),
+#     ncol = 3, data = NA_real_,
+#     dimnames = list(
+#         c(names(ensembles_gen), names(ensembles_spec), names(ensembles_gen_pgdl)),
+#         c('NSE', 'KGE', 'pbias')
+#     )
+# )
+# get_all_testsites <- function(...){
+#
+#     #...: runlists
+#
+#     cfgs <- sapply(c(...), function(x) x[1])
+#
+#     for(cfg in cfgs){
+#
+#     return()
+# }
+# get_all_testsites(ensembles_gen, ensembles_spec, ensembles_gen_pgdl)
+metrics <- tibble()
 pred_q <- list()
-for(i in seq_len(nrow(metrics))){
+ensembles <- c(ensembles_gen, ensembles_spec, ensembles_gen_pgdl)
+# for(i in seq_len(nrow(metrics))){
+# cntr <- 1
+for(i in seq_along(ensembles)){
 
-    neon_site <- rownames(metrics)[i]
+    # neon_site <- rownames(metrics)[i] #there might be more than one site in test.txt
+    neon_site <- names(ensembles)[i] #there might be more than one site in test.txt
     if(neon_site %in% names(ensembles_gen)){
         runlist <- ensembles_gen[[neon_site]]
         phase <- 'run'
@@ -266,19 +264,11 @@ for(i in seq_len(nrow(metrics))){
         stop('update')
     }
 
-    neon_q_manual <- read_csv(glue('in/NEON/neon_field_Q/{neon_site}.csv')) %>%
-        mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
-        rename(discharge_manual = discharge) %>%
-        distinct(datetime, .keep_all = TRUE) %>%
-        mutate(date = as.Date(datetime))
-
     rundirs <- list.files('out/lstm_runs/', pattern = paste0('^', phase)) %>%
         str_match(glue('{phase}(?:{rl})_[0-9_]+', rl = paste(runlist, collapse = '|'))) %>%
         {.[, 1]} %>%
         na.omit() %>%
         as.vector()
-
-    ws_area_ha <- na.omit(neon_areas$ws_area_ha[neon_areas$site_code == neon_site])
 
     ensemble_results <- list()
     for(j in seq_along(rundirs)){
@@ -289,13 +279,31 @@ for(i in seq_len(nrow(metrics))){
 
         lstm_out <- reticulate::py_load_object(file.path(epoch_dir, 'test_results.p'))
 
-        pred <- lstm_out[[paste0(neon_site, '_MANUALQ')]]$`1D`$xr$discharge_sim$to_pandas()
-        pred <- tibble(date = as.Date(rownames(pred)), Q = pred$`0`) %>%
-            rename(discharge_sim = Q) %>%
-            #      L/s            mm/d             L/m^3  m^2/ha mm/m   s/d     ha
-            mutate(discharge_sim = discharge_sim * 1000 * 1e4 / 1000 / 86400 * ws_area_ha)
+        for(k in seq_along(lstm_out)){
 
-        ensemble_results[[j]] <- pred
+            # ensemble_results[[cntr]] <- list()
+            neon_site_manq <- names(lstm_out)[k]
+            neon_site_ <- str_extract(neon_site_manq, '[A-Z]{4}')
+
+            neon_q_manual <- read_csv(glue('in/NEON/neon_field_Q/{neon_site_}.csv')) %>%
+                mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
+                rename(discharge_manual = discharge) %>%
+                distinct(datetime, .keep_all = TRUE) %>%
+                mutate(date = as.Date(datetime))
+
+            ws_area_ha <- na.omit(neon_areas$ws_area_ha[neon_areas$site_code == neon_site_])
+
+            pred <- lstm_out[[neon_site_manq]]$`1D`$xr$discharge_sim$to_pandas()
+            pred <- tibble(date = as.Date(rownames(pred)), Q = pred$`0`) %>%
+                rename(discharge_sim = Q) %>%
+                #      L/s            mm/d             L/m^3  m^2/ha mm/m   s/d     ha
+                mutate(discharge_sim = discharge_sim * 1000 * 1e4 / 1000 / 86400 * ws_area_ha,
+                       site_code = neon_site_)
+
+            ensemble_results <- c(ensemble_results, list(pred))
+            # ensemble_results[[cntr]] <- pred
+            # cntr <- cntr + 1
+        }
     }
 
     ensemble_m <- map(ensemble_results, ~.$discharge_sim) %>%
@@ -322,24 +330,20 @@ for(i in seq_len(nrow(metrics))){
     pred_q_filt <- pred_q[[neon_site]] %>%
         filter(! is.na(datetime))
 
-    plot(pred_q_filt$datetime, pred_q_filt$mean_run, type = 'l')
-    points(pred_q_filt$datetime, pred_q_filt$discharge_manual)
-    points(pred_q_filt$datetime[pred_q_filt$date > holdout_cutuff],
-           pred_q_filt$discharge_manual[pred_q_filt$date > holdout_cutuff],
-           col = 'red')
+    # plot(pred_q_filt$datetime, pred_q_filt$mean_run, type = 'l')
+    # points(pred_q_filt$datetime, pred_q_filt$discharge_manual)
 
-    metrics[i, 1] <- hydroGOF::NSE(sim = pred_q_filt$mean_run[pred_q_filt$date > holdout_cutuff],
-                                   obs = pred_q_filt$discharge_manual[pred_q_filt$date > holdout_cutuff])
-    metrics[i, 2] <- hydroGOF::KGE(sim = pred_q_filt$mean_run[pred_q_filt$date > holdout_cutuff],
-                                   obs = pred_q_filt$discharge_manual[pred_q_filt$date > holdout_cutuff])
-    metrics[i, 3] <- hydroGOF::pbias(sim = pred_q_filt$mean_run[pred_q_filt$date > holdout_cutuff],
-                                     obs = pred_q_filt$discharge_manual[pred_q_filt$date > holdout_cutuff])
-    metrics[i, 4] <- hydroGOF::NSE(sim = pred_q_filt$mean_run,
-                                   obs = pred_q_filt$discharge_manual)
-    metrics[i, 5] <- hydroGOF::KGE(sim = pred_q_filt$mean_run,
-                                   obs = pred_q_filt$discharge_manual)
-    metrics[i, 6] <- hydroGOF::pbias(sim = pred_q_filt$mean_run,
-                                     obs = pred_q_filt$discharge_manual)
+    metrics_ <- tibble(
+        KGE = KGE(sim = pred_q_filt$mean_run, obs = pred_q_filt$discharge_manual)
+        NSE = NSE(sim = pred_q_filt$mean_run, obs = pred_q_filt$discharge_manual)
+        pbias = pbias(sim = pred_q_filt$mean_run, obs = pred_q_filt$discharge_manual)
+    )
+    # metrics[i, 1] <- hydroGOF::NSE(sim = pred_q_filt$mean_run,
+    #                                obs = pred_q_filt$discharge_manual)
+    # metrics[i, 2] <- hydroGOF::KGE(sim = pred_q_filt$mean_run,
+    #                                obs = pred_q_filt$discharge_manual)
+    # metrics[i, 3] <- hydroGOF::pbias(sim = pred_q_filt$mean_run,
+    #                                  obs = pred_q_filt$discharge_manual)
 
     pred_q_filt %>%
         select(site_code, datetime, Q_neon_field = discharge_manual,
@@ -349,7 +353,7 @@ for(i in seq_len(nrow(metrics))){
 
 as.data.frame(metrics) %>%
     rownames_to_column('site_code') %>%
-    select(site_code, NSE, NSE_holdout, KGE, KGE_holdout, pbias, pbias_holdout) %>%
+    select(site_code, KGE, NSE, pbias) %>%
     write_csv('out/lstm_out/results.csv')
 
 # 7. generate output plots and datasets ####
