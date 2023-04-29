@@ -117,12 +117,12 @@ for(run in unique_runs){
 
 ensembles_gen <- list(
     TECR = 4113:4142, #same ensemble as FLNT
-    FLNT = 4113:4142, #same ensemble as TECR
+    # FLNT = 4113:4142, #same ensemble as TECR
     HOPB = 4173:4202,
     MART = 4293:4322,
     MCRA = 4323:4352, #same ensemble as BLDE and MCRA
-    BLDE = 4323:4352, #
-    MAYF = 4323:4352, #
+    # BLDE = 4323:4352, #
+    # MAYF = 4323:4352, #
     LECO = 4473:4502,
     WALK = 4623:4652
 )
@@ -137,7 +137,7 @@ ensembles_spec <- list(
 )
 
 ensembles_gen_pgdl <- list(
-    WLOU = 4232:4262,
+    WLOU = 4233:4262,
     KING = 4263:4292,
     MCDI = 4353:4382,
     COMO = 4503:4532,
@@ -184,8 +184,8 @@ for(ensemb_site in ensembles_gen_pgdl){
 # system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_runs|PLACEHOLDER2|g' -i"))
 # system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/runs|PLACEHOLDER2|g' -i"))
 # system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_configs|PLACEHOLDER|g' -i"))
-#
-# cfgs <- list.files('out/ergh', pattern = 'config.yml', recursive = TRUE, full.names = TRUE)
+
+# cfgs <- list.files('out/lstm_runs', pattern = 'config.yml', recursive = TRUE, full.names = TRUE)
 # for(cfg_ in cfgs){
 #     read_file(cfg_) %>%
 #         str_replace_all('PLACEHOLDER3', datadir) %>%
@@ -193,6 +193,21 @@ for(ensemb_site in ensembles_gen_pgdl){
 #         str_replace_all('PLACEHOLDER', confdir) %>%
 #         write_file(cfg_)
 # }
+
+status_gen <- tibble()
+for(ensemb_site in ensembles_gen){
+    status_gen <- bind_rows(status_gen, identify_incomplete_lstms('generalist', ensemb_site))
+}
+status_spec <- tibble()
+for(ensemb_site in ensembles_spec){
+    status_spec <- bind_rows(status_spec, identify_incomplete_lstms('specialist', ensemb_site))
+}
+status_gen_pgdl <- tibble()
+for(ensemb_site in ensembles_gen_pgdl){
+    status_gen_pgdl <- bind_rows(status_gen_pgdl, identify_incomplete_lstms('generalist', ensemb_site))
+}
+
+##
 
 for(ensemb_site in ensembles_gen){
     eval_lstms('generalist', ensemb_site)

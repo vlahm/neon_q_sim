@@ -41,7 +41,7 @@ system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home
 # system(paste0("find out/ergh -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/runs|PLACEHOLDER2|g' -i"))
 # system(paste0("find out/ergh -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_configs|PLACEHOLDER|g' -i"))
 
-cfgs <- list.files('out/ergh', pattern = 'config.yml', recursive = TRUE, full.names = TRUE)
+cfgs <- list.files('out/lstm_runs', pattern = 'config.yml', recursive = TRUE, full.names = TRUE)
 for(cfg_ in cfgs){
     read_file(cfg_) %>%
         str_replace_all('PLACEHOLDER3', datadir) %>%

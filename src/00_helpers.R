@@ -1994,6 +1994,125 @@ run_lstm <- function(strategy, runset, ensemble = FALSE){
     py_run_file('src/lstm_dungeon/run_lstms_local.py')
 }
 
+identify_incomplete_lstms <- function(strategy, runset, rm = FALSE){
+
+    #strategy: either 'generalist' or 'specialist'
+    #runset: a numeric vector of run IDs
+
+    phase <- ifelse(strategy == 'generalist', 'run', 'finetune')
+
+    statuses <- tibble(run = paste0(phase, runset), status = NA_character_)
+    for(i in 1:length(runset)){
+
+        rundir_ <- list.files('out/lstm_runs',
+                              pattern = paste0(phase, runset[i]),
+                              full.names = TRUE)
+
+        if(! length(rundir_)){
+            statuses[i, 'status'] <- 'incomplete'
+            next
+        }
+
+        cfg <- file.path(rundir_, 'config.yml')
+        save_for_spec <- cfg
+
+        if(length(cfg) > 1){
+
+            conclusion <- 'all incomplete'
+            for(j in seq_along(cfg)){
+
+                expected_epochs <- read_lines(cfg[j]) %>%
+                    str_subset('epochs') %>%
+                    str_extract('[0-9]+') %>%
+                    as.numeric()
+
+                actual_epochs <- suppressWarnings({
+                    list.files(rundir_[j]) %>%
+                        str_subset('model_epoch') %>%
+                        str_extract('[0-9]+') %>%
+                        as.numeric() %>%
+                        max()
+                })
+
+                if(actual_epochs == expected_epochs){
+                    dupe_dirs <- dirname(cfg)
+                    conclusion <- paste('drop', paste(dupe_dirs[-j], collapse = ', '))
+                    if(rm){
+                        unlink(dupe_dirs[-j], recursive = TRUE)
+                        conclusion <- paste('dropped', paste(dupe_dirs[-j], collapse = ', '))
+                    } else {
+                        print(paste('would remove', dupe_dirs[-j]))
+                    }
+                    break
+                }
+            }
+
+            statuses[i, 'status'] <- paste('too many rundirs;', conclusion)
+            next
+        }
+
+        expected_epochs <- read_lines(cfg) %>%
+            str_subset('epochs') %>%
+            str_extract('[0-9]+') %>%
+            as.numeric()
+
+        actual_epochs <- suppressWarnings({
+            list.files(rundir_) %>%
+            str_subset('model_epoch') %>%
+            str_extract('[0-9]+') %>%
+            as.numeric() %>%
+            max()
+        })
+
+        if(actual_epochs != expected_epochs){
+            statuses[i, 'status'] <- 'incomplete'
+        } else {
+            statuses[i, 'status'] <- 'good'
+        }
+
+        #also gotta check base run
+        if(strategy == 'specialist'){
+
+            rundir_ <- list.files('out/lstm_runs',
+                                  pattern = paste0('run', runset[i]),
+                                  full.names = TRUE)
+
+            if(! length(rundir_)){
+                stop('how is this possible?')
+            }
+
+            cfg <- file.path(rundir_, 'config.yml')
+
+            if(length(cfg) > 1){
+                rundirs <- str_extract(cfg, '^out/lstm_runs/([^/]+)/config.yml', group = 1)
+                ftdirs <- str_extract(save_for_spec, '^out/lstm_runs/([^/]+)/config.yml', group = 1)
+                statuses[i, 'status'] <- paste(c(rundirs, ftdirs), collapse = ', ')
+                next
+            }
+
+            expected_epochs <- read_lines(cfg) %>%
+                str_subset('epochs') %>%
+                str_extract('[0-9]+') %>%
+                as.numeric()
+
+            actual_epochs <- suppressWarnings({
+                list.files(rundir_) %>%
+                    str_subset('model_epoch') %>%
+                    str_extract('[0-9]+') %>%
+                    as.numeric() %>%
+                    max()
+            })
+
+            if(actual_epochs != expected_epochs){
+                statuses[i, 'status'] <- 'incomplete'
+            }
+            #else the previous status holds
+        }
+    }
+
+    return(statuses)
+}
+
 eval_lstms <- function(strategy, runset){
 
     #strategy: either 'generalist' or 'specialist'
