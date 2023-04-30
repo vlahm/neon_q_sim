@@ -2117,52 +2117,27 @@ identify_incomplete_lstms <- function(strategy, runset, rm = FALSE){
     return(statuses)
 }
 
-eval_lstms <- function(strategy, runset){
+eval_lstms <- function(strategy, runset, re_eval = TRUE){
 
     #strategy: either 'generalist' or 'specialist'
     #runset: a numeric vector of run IDs
 
     phase <- ifelse(strategy == 'generalist', 'run', 'finetune')
-    # phase_token <- ifelse(phase == 'run', 'continue', 'finetune')
-
-    #adjust test periods
     run_range <- paste(range(runset), collapse = '-')
     runset_parent_dir <- paste0('in/lstm_configs/runs_', run_range)
     run_dirs <- list.files(runset_parent_dir, pattern = 'run', full.names = FALSE)
-    # for(rd in run_dirs){
-    #     testrng_path <- file.path(runset_parent_dir, rd, 'test_ranges.csv')
-    #     read_csv(testrng_path) %>%
-    #         mutate(start_dates = as.character(holdout[1]),
-    #                end_dates = as.character(holdout[2])) %>%
-    #         write_csv(sub('\\.csv$', '_holdout.csv', testrng_path))
-    # }
-
-    #pickle (serialize) holdout ranges
-    r2pyenv_template <- new.env()
-    r2pyenv_template$confdir <- confdir
-    r2pyenv_template$runset <- paste0('runs_', run_range)
-    # r2pyenv <<- as.list(r2pyenv_template)
-    # py_run_file('src/lstm_dungeon/pickle_test_periods.py')
-
-    #make new configs that point to */test_ranges_holdout.pkl
-    # for(rd in run_dirs){
-    #
-    #     rundir_ <- list.files('out/lstm_runs', pattern = rd, full.names = TRUE)
-    #     if(! length(rundir_)) next
-    #     cfg <- file.path(rundir_, 'config.yml')
-    #     file.rename(cfg, paste0(cfg, '.bak'))
-    #
-    #     read_lines(paste0(cfg, '.bak')) %>%
-    #         str_replace('test_ranges\\.pkl', 'test_ranges_holdout.pkl') %>%
-    #         write_lines(cfg)
-    # }
 
     #re-evaluate
-    r2pyenv_template$wdir <- getwd()
-    r2pyenv_template$runrange <- as.integer(runset)
-    r2pyenv_template$phase <- phase
-    r2pyenv <<- as.list(r2pyenv_template)
-    py_run_file('src/lstm_dungeon/re-evaluate_models.py')
+    if(re_eval){
+        r2pyenv_template <- new.env()
+        r2pyenv_template$confdir <- confdir
+        r2pyenv_template$runset <- paste0('runs_', run_range)
+        r2pyenv_template$wdir <- getwd()
+        r2pyenv_template$runrange <- as.integer(runset)
+        r2pyenv_template$phase <- phase
+        r2pyenv <<- as.list(r2pyenv_template)
+        py_run_file('src/lstm_dungeon/re-evaluate_models.py')
+    }
 
     #compute metrics (NauralHydrology 1.3.0 doesn't write to test_metrics.csv?)
     metrics <- list()
@@ -2202,7 +2177,7 @@ eval_lstms <- function(strategy, runset){
 
             predobs <- left_join(pred, obs, by = 'date')
 
-            tibble(#site_code = site,
+            tibble(
                    nse = hydroGOF::NSE(predobs$discharge_sim, predobs$discharge_obs),
                    kge = hydroGOF::KGE(predobs$discharge_sim, predobs$discharge_obs),
                    pbias = hydroGOF::pbias(predobs$discharge_sim, predobs$discharge_obs))
@@ -2213,15 +2188,6 @@ eval_lstms <- function(strategy, runset){
             tibble::rownames_to_column('site_code') %>%
             mutate(site_code = sub('_MANUALQ', '', site_code))
     }
-
-    # #set configs to point back to */test_ranges.pkl
-    # for(rd in run_dirs){
-    #
-    #     rundir_ <- list.files('out/lstm_runs', pattern = rd, full.names = TRUE)
-    #     if(! length(rundir_)) next
-    #     cfg <- file.path(rundir_, 'config.yml')
-    #     suppressWarnings(try(file.rename(paste0(cfg, '.bak'), cfg), silent = TRUE))
-    # }
 
     return(metrics)
 }
@@ -2351,6 +2317,68 @@ build_ensemble_config <- function(sites, runid, param_search, ensemb_n = 30){
     r2pyenv_template$runset <- cfgnew_
     r2pyenv <<- as.list(r2pyenv_template)
     py_run_file('src/lstm_dungeon/pickle_traintest_periods.py')
+}
+
+build_metrics_skeleton <- function(...){
+
+    #...: runlists
+
+    cfgs <- sapply(c(...), function(x) x[1])
+
+    sitev <- phasev <- stratv <- c()
+    runlistv <- list()
+    for(cfg in cfgs){
+
+        cfgd <- list.files('in/lstm_configs', recursive = TRUE,
+                           pattern = as.character(cfg), full.names = TRUE) %>%
+            dirname() %>%
+            {.[1]}
+
+        sites_ <- str_extract(read_lines(file.path(cfgd, 'test.txt')), '[A-Z]{4}')
+        sitev <- c(sitev, sites_)
+
+        phasev <- list.files(cfgd) %>%
+            str_detect('finetune') %>%
+            any() %>%
+            ifelse('finetune', 'run') %>%
+            rep(length(sites_)) %>%
+            {c(phasev, .)}
+
+        runlistv <- str_split(cfgd, '/')[[1]][3] %>%
+            str_match('([0-9]+)-([0-9]+)') %>%
+            {.[, 2:3]} %>%
+            {seq(.[1], .[2])} %>%
+            list() %>%
+            rep(length(sites_)) %>%
+            {c(runlistv, .)}
+
+        stratv_ <- list.files(cfgd) %>%
+            str_detect('finetune') %>%
+            any() %>%
+            ifelse('specialist', 'generalist') %>%
+            rep(length(sites_))
+
+        stratv <- list.files(cfgd, full.names = TRUE) %>%
+            str_subset('continue[0-9]+\\.yml$') %>%
+            read_lines() %>%
+            str_subset('base_run_dir') %>%
+            str_detect('_NHM_') %>%
+            ifelse('_pgdl', '') %>%
+            {paste0(stratv_, .)} %>%
+            {c(stratv, .)}
+    }
+
+    skele <- tibble(
+        site = sitev,
+        strategy = stratv,
+        phase = phasev,
+        runlist = runlistv,
+        KGE = NA_real_,
+        NSE = NA_real_,
+        pbias = NA_real_
+    )
+
+    return(skele)
 }
 
 # misc helpers required to generate figures/datasets ####

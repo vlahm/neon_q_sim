@@ -74,17 +74,34 @@ run_lstm('specialist', param_search$pgdl_specialist)
 
 # 3. evaluate all models. determine where ensembles are warranted ####
 
-skilled_generalists <- eval_lstms('generalist', param_search$generalist) %>%
-    identify_best_models(kge_thresh = 0.6)
+all_generalists <- eval_lstms('generalist', param_search$generalist) %>%
+    identify_best_models(kge_thresh = -Inf)
+skilled_generalists <- filter(all_generalists, kge >= 0.6)
 
-skilled_specialists <- eval_lstms('specialist', param_search$specialist) %>%
-    identify_best_models(kge_thresh = 0.6)
+all_specialists <- eval_lstms('specialist', param_search$specialist) %>%
+    identify_best_models(kge_thresh = -Inf)
+skilled_specialists <- filter(all_specialists, kge >= 0.6)
 
-skilled_pgdl_generalists <- eval_lstms('generalist', param_search$pgdl_generalist) %>%
-    identify_best_models(kge_thresh = 0.6)
+all_pgdl_generalists <- eval_lstms('generalist', param_search$pgdl_generalist) %>%
+    identify_best_models(kge_thresh = -Inf)
+skilled_pgdl_generalists <- filter(all_pgdl_generalists, kge >= 0.6)
 
-skilled_pgdl_specialists <- eval_lstms('specialist', param_search$pgdl_specialist) %>%
-    identify_best_models(kge_thresh = 0.6)
+all_pgdl_specialists <- eval_lstms('specialist', param_search$pgdl_specialist) %>%
+    identify_best_models(kge_thresh = -Inf)
+skilled_pgdl_specialists <- filter(all_pgdl_specialists, kge >= 0.6)
+
+best_by_strategy <- bind_rows(
+        mutate(all_generalists, strategy = 'gen'),
+        mutate(all_specialists, strategy = 'spec'),
+        mutate(all_pgdl_generalists, strategy = 'pgdl_gen'),
+        mutate(all_pgdl_specialists, strategy = 'pgdl_spec')
+    ) %>%
+    group_by(site_code, strategy) %>%
+    filter(kge == max(kge)) %>%
+    ungroup() %>%
+    arrange(strategy, desc(kge))
+
+write_csv(best_by_strategy, 'out/lstm_out/param_search_skill.csv')
 
 skilled <- bind_rows(
         mutate(skilled_generalists, strategy = 'gen'),
@@ -98,7 +115,6 @@ skilled <- bind_rows(
     arrange(desc(kge)) %>%
     print(n = 100)
 
-# write_csv(skilled, '~/Desktop/dcc_runs/skilled_searches.csv')
 # skilled = read_csv('~/Desktop/dcc_runs/skilled_searches.csv')
 # distinct(skilled, run, .keep_all = T)
 
@@ -181,6 +197,7 @@ run_lstm('generalist', ensembles_gen$REDB, ensemble = TRUE)
 run_lstm('generalist', ensembles_gen$POSE, ensemble = TRUE)
 
 ## you might need to sort out runs that failed due to race conditions
+## if you ran models in parallel
 
 # status_gen <- tibble()
 # for(ensemb_site in ensembles_gen){
@@ -199,6 +216,7 @@ run_lstm('generalist', ensembles_gen$POSE, ensemble = TRUE)
 # 6. gather results of ensembles ####
 
 ## if you ran ensembles on a cluster, you'll need to adjust paths for your local machine
+## using this commented chunk
 
 # system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_data|PLACEHOLDER3|g' -i"))
 # system(paste0("find out/lstm_runs -name 'config.yml' | xargs sed -e 's|/hpc/home/mjv22/q_sim/lstm_runs|PLACEHOLDER2|g' -i"))
@@ -223,46 +241,21 @@ for(ensemb_site in ensembles_gen_pgdl){
     eval_lstms('generalist', ensemb_site)
 }
 
-# metrics <- matrix(
-#     nrow = length(ensembles_gen) + length(ensembles_spec) + length(ensembles_gen_pgdl),
-#     ncol = 3, data = NA_real_,
-#     dimnames = list(
-#         c(names(ensembles_gen), names(ensembles_spec), names(ensembles_gen_pgdl)),
-#         c('NSE', 'KGE', 'pbias')
-#     )
-# )
-# get_all_testsites <- function(...){
-#
-#     #...: runlists
-#
-#     cfgs <- sapply(c(...), function(x) x[1])
-#
-#     for(cfg in cfgs){
-#
-#     return()
-# }
-# get_all_testsites(ensembles_gen, ensembles_spec, ensembles_gen_pgdl)
-metrics <- tibble()
+metrics <- build_metrics_skeleton(ensembles_gen, ensembles_spec, ensembles_gen_pgdl)
 pred_q <- list()
-ensembles <- c(ensembles_gen, ensembles_spec, ensembles_gen_pgdl)
-# for(i in seq_len(nrow(metrics))){
+for(i in seq_len(nrow(metrics))){
 # cntr <- 1
-for(i in seq_along(ensembles)){
+# for(i in seq_along(ensembles)){
 
-    # neon_site <- rownames(metrics)[i] #there might be more than one site in test.txt
-    neon_site <- names(ensembles)[i] #there might be more than one site in test.txt
-    if(neon_site %in% names(ensembles_gen)){
-        runlist <- ensembles_gen[[neon_site]]
-        phase <- 'run'
-    } else if(neon_site %in% names(ensembles_spec)){
-        runlist <- ensembles_spec[[neon_site]]
-        phase <- 'finetune'
-    } else if(neon_site %in% names(ensembles_gen_pgdl)){
-        runlist <- ensembles_gen_pgdl[[neon_site]]
-        phase <- 'run'
-    } else {
-        stop('update')
-    }
+    neon_site <- metrics$site[i]
+    phase <- metrics$phase[i]
+    runlist <- metrics$runlist[[i]]
+
+    neon_q_manual <- read_csv(glue('in/NEON/neon_field_Q/{neon_site}.csv')) %>%
+        mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
+        rename(discharge_manual = discharge) %>%
+        distinct(datetime, .keep_all = TRUE) %>%
+        mutate(date = as.Date(datetime))
 
     rundirs <- list.files('out/lstm_runs/', pattern = paste0('^', phase)) %>%
         str_match(glue('{phase}(?:{rl})_[0-9_]+', rl = paste(runlist, collapse = '|'))) %>%
@@ -279,31 +272,16 @@ for(i in seq_along(ensembles)){
 
         lstm_out <- reticulate::py_load_object(file.path(epoch_dir, 'test_results.p'))
 
-        for(k in seq_along(lstm_out)){
+        ws_area_ha <- na.omit(neon_areas$ws_area_ha[neon_areas$site_code == neon_site])
 
-            # ensemble_results[[cntr]] <- list()
-            neon_site_manq <- names(lstm_out)[k]
-            neon_site_ <- str_extract(neon_site_manq, '[A-Z]{4}')
+        pred <- lstm_out[[paste0(neon_site, '_MANUALQ')]]$`1D`$xr$discharge_sim$to_pandas()
+        pred <- tibble(date = as.Date(rownames(pred)), Q = pred$`0`) %>%
+            rename(discharge_sim = Q) %>%
+            #      L/s            mm/d             L/m^3  m^2/ha mm/m   s/d     ha
+            mutate(discharge_sim = discharge_sim * 1000 * 1e4 / 1000 / 86400 * ws_area_ha,
+                   site_code = neon_site)
 
-            neon_q_manual <- read_csv(glue('in/NEON/neon_field_Q/{neon_site_}.csv')) %>%
-                mutate(discharge = ifelse(discharge < 0, 0, discharge)) %>%
-                rename(discharge_manual = discharge) %>%
-                distinct(datetime, .keep_all = TRUE) %>%
-                mutate(date = as.Date(datetime))
-
-            ws_area_ha <- na.omit(neon_areas$ws_area_ha[neon_areas$site_code == neon_site_])
-
-            pred <- lstm_out[[neon_site_manq]]$`1D`$xr$discharge_sim$to_pandas()
-            pred <- tibble(date = as.Date(rownames(pred)), Q = pred$`0`) %>%
-                rename(discharge_sim = Q) %>%
-                #      L/s            mm/d             L/m^3  m^2/ha mm/m   s/d     ha
-                mutate(discharge_sim = discharge_sim * 1000 * 1e4 / 1000 / 86400 * ws_area_ha,
-                       site_code = neon_site_)
-
-            ensemble_results <- c(ensemble_results, list(pred))
-            # ensemble_results[[cntr]] <- pred
-            # cntr <- cntr + 1
-        }
+        ensemble_results[[j]] <- pred
     }
 
     ensemble_m <- map(ensemble_results, ~.$discharge_sim) %>%
@@ -333,17 +311,9 @@ for(i in seq_along(ensembles)){
     # plot(pred_q_filt$datetime, pred_q_filt$mean_run, type = 'l')
     # points(pred_q_filt$datetime, pred_q_filt$discharge_manual)
 
-    metrics_ <- tibble(
-        KGE = KGE(sim = pred_q_filt$mean_run, obs = pred_q_filt$discharge_manual)
-        NSE = NSE(sim = pred_q_filt$mean_run, obs = pred_q_filt$discharge_manual)
-        pbias = pbias(sim = pred_q_filt$mean_run, obs = pred_q_filt$discharge_manual)
-    )
-    # metrics[i, 1] <- hydroGOF::NSE(sim = pred_q_filt$mean_run,
-    #                                obs = pred_q_filt$discharge_manual)
-    # metrics[i, 2] <- hydroGOF::KGE(sim = pred_q_filt$mean_run,
-    #                                obs = pred_q_filt$discharge_manual)
-    # metrics[i, 3] <- hydroGOF::pbias(sim = pred_q_filt$mean_run,
-    #                                  obs = pred_q_filt$discharge_manual)
+    metrics$KGE[i] <- KGE(sim = pred_q_filt$mean_run, obs = pred_q_filt$discharge_manual)
+    metrics$NSE[i] <- NSE(sim = pred_q_filt$mean_run, obs = pred_q_filt$discharge_manual)
+    metrics$pbias[i] <- pbias(sim = pred_q_filt$mean_run, obs = pred_q_filt$discharge_manual)
 
     pred_q_filt %>%
         select(site_code, datetime, Q_neon_field = discharge_manual,
@@ -351,9 +321,9 @@ for(i in seq_along(ensembles)){
         write_csv(glue('out/lstm_out/fit/{neon_site}.csv'))
 }
 
-as.data.frame(metrics) %>%
-    rownames_to_column('site_code') %>%
-    select(site_code, KGE, NSE, pbias) %>%
+metrics %>%
+    select(site_code = site, strategy, KGE, NSE, pbias) %>%
+    arrange(desc(KGE)) %>%
     write_csv('out/lstm_out/results.csv')
 
 # 7. generate output plots and datasets ####
@@ -362,6 +332,11 @@ library(lubridate)
 library(xts)
 library(dygraphs)
 library(htmlwidgets)
+
+#don't save predictions for sites with weak ensembles.
+legit_ensemb <- filter(metrics, KGE >= 0.5, NSE >= 0.4) %>% pull(site)
+pred_q <- Filter(function(x) Find(function(y) ! is.na(y), x$site_code) %in% legit_ensemb,
+                 pred_q)
 
 for(i in seq_along(pred_q)){
 
@@ -384,7 +359,7 @@ for(i in seq_along(pred_q)){
                Q_predicted = mean_run,
                Q_pred_int_2.5 = lower_bound_2.5,
                Q_pred_int_97.5 = upper_bound_97.5,
-               Q_neon_continuous = discharge_auto) %>%
+               Q_neon_release2023_qcpass = discharge_auto) %>%
         filter(! is.na(Q_predicted)) %>%
         arrange(date) %>%
         write_csv(glue('out/lstm_out/predictions/{neon_site}.csv'))
@@ -416,9 +391,10 @@ for(i in seq_along(pred_q)){
         6, 6, 'in', type = 'cairo', res = 300)
     plot(plotdata$Q_neon_field, plotdata$Q_predicted, xlab = 'NEON Field Discharge (L/s)',
          ylab = 'Predicted Discharge (L/s)',
-         main = glue('Site: {neon_site}; NSE overall: {nse1}; NSE holdout: {nse2}',
-                     nse1 = round(metrics[rownames(metrics) == neon_site, 'NSE'], 2),
-                     nse2 = round(metrics[rownames(metrics) == neon_site, 'NSE_holdout'], 2)),
+         main = glue('Site: {neon_site}; KGE: {kge}; NSE: {nse}; pbias: {pb}',
+                     nse = round(metrics$NSE[metrics$site == neon_site], 2),
+                     kge = round(metrics$KGE[metrics$site == neon_site], 2),
+                     pb = round(metrics$pbias[metrics$site == neon_site], 2)),
          xlim = axlim, ylim = axlim, xaxs = 'i', yaxs = 'i')
     abline(a = 0, b = 1, col = 'blue')
     legend('topleft', legend = '1:1', lty = 1, col = 'blue', bty = 'n')

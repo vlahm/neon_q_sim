@@ -20,6 +20,7 @@ if(! dir.exists('out/lm_out')) source('src/02_regression.R', local = new.env())
 if(! dir.exists('in/lstm_data')) source('src/03_organize_camels_macrosheds_nhm.R', local = new.env())
 if(! dir.exists('out/lstm_runs')) stop("you need to run src/04_run_lstms.R. It will take many days unless run on a cluster. Or use our bundled results.")
 
+#might want to run src/07_barplot.R to decide how you want to rank models
 ranks <- read_csv('cfg/model_ranks.csv')
 
 # 1. helpers ####

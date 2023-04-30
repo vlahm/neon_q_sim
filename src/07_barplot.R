@@ -54,8 +54,8 @@ plotd <- matrix(
         c('site', 'nse_neon_min', 'nse_neon_overall', 'nse_neon_max',
           'kge_neon_min', 'kge_neon_overall', 'kge_neon_max',
           'nse_lm', 'nse_lm_scaled', 'kge_lm', 'kge_lm_scaled')
-        # c('site', 'nse_lm', 'nse_lm_scaled', 'nse_gen', 'nse_spec', 'nse_pgdl',
-        #   'kge_lm', 'kge_lm_scaled', 'kge_gen', 'kge_spec', 'kge_pgdl')
+          # 'nse_gen', 'nse_spec', 'nse_gen_pgdl', 'nse_spec_pgdl',
+          # 'kge_gen', 'kge_spec', 'kge_gen_pgdl', 'kge_spec_pgdl')
     )
 ) %>% as_tibble()
 
@@ -78,9 +78,25 @@ for(s in plotd$site){
 
 ## 3. compile LSTM results ####
 
-gen_res <- retrieve_test_results(generalist_runids, strategy = 'generalist')
+ensemble_results <- read_csv('out/lstm_out/results.csv') %>%
+    select(-pbias) %>%
+    pivot_wider(names_from = strategy, values_from = c(KGE, NSE))
+HERE: NEED TO FILL IN THE BLANKS WITH PARAM SEARCH VALUES
+    PROBABLY STILL SHOW ALL IN THE PLOT, BUT INCLUDE TABLE IN SUPPLEMENTAL?
+param_search_results <- read_csv('out/lstm_out/param_search_skill.csv')
 
+left_join(plotd, ensemble_results
 
+plotd$nse_gen =
+plotd$kge_gen =
+plotd$nse_spec =
+plotd$kge_spec =
+plotd$nse_gen_pgdl =
+plotd$kge_gen_pgdl =
+plotd$nse_spec_pgdl =
+plotd$kge_spec_pgdl =
+
+# gen_res <- retrieve_test_results(generalist_runids, strategy = 'generalist')
 # gen_res <- retrieve_test_results(generalist_runids)
 # spec_res <- retrieve_test_results(specialist_runids)
 # pgdl_res <- retrieve_test_results(pgdl_runids)
@@ -90,12 +106,12 @@ gen_res <- retrieve_test_results(generalist_runids, strategy = 'generalist')
 # c('site', 'nse_lm', 'nse_lm_scaled', 'nse_gen', 'nse_spec', 'nse_pgdl',
 #   'kge_lm', 'kge_lm_scaled', 'kge_gen', 'kge_spec', 'kge_pgdl')
 
-plotd <- left_join(plotd, reduce_results(gen_res$nse, 'nse_gen', max, na.rm = TRUE))
-plotd <- left_join(plotd, reduce_results(gen_res$kge, 'kge_gen', max, na.rm = TRUE))
-plotd <- left_join(plotd, reduce_results(spec_res$nse, 'nse_spec', mean, na.rm = TRUE))
-plotd <- left_join(plotd, reduce_results(spec_res$kge, 'kge_spec', mean, na.rm = TRUE))
-plotd <- left_join(plotd, reduce_results(pgdl_res$nse, 'nse_pgdl', mean, na.rm = TRUE))
-plotd <- left_join(plotd, reduce_results(pgdl_res$kge, 'kge_pgdl', mean, na.rm = TRUE))
+# plotd <- left_join(plotd, reduce_results(gen_res$nse, 'nse_gen', max, na.rm = TRUE))
+# plotd <- left_join(plotd, reduce_results(gen_res$kge, 'kge_gen', max, na.rm = TRUE))
+# plotd <- left_join(plotd, reduce_results(spec_res$nse, 'nse_spec', mean, na.rm = TRUE))
+# plotd <- left_join(plotd, reduce_results(spec_res$kge, 'kge_spec', mean, na.rm = TRUE))
+# plotd <- left_join(plotd, reduce_results(pgdl_res$nse, 'nse_pgdl', mean, na.rm = TRUE))
+# plotd <- left_join(plotd, reduce_results(pgdl_res$kge, 'kge_pgdl', mean, na.rm = TRUE))
 
 ## 4. compile NEON results ####
 
@@ -172,6 +188,8 @@ for(s in plotd$site){
 }
 
 ## 5. figure 2 ####
+
+CONSIDER RED ASTERISKS BY NAMES OF SITES THAT WERE NOT ENSEMBLED
 
 #fig Sx (same as fig 2, but showing NSE)
 
