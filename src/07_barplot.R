@@ -78,40 +78,32 @@ for(s in plotd$site){
 
 ## 3. compile LSTM results ####
 
+param_search_results <- read_csv('out/lstm_out/param_search_skill.csv') %>%
+    mutate(strategy = case_when(strategy == 'gen' ~ 'generalist',
+                                strategy == 'spec' ~ 'specialist',
+                                strategy == 'pgdl_gen' ~ 'generalist_pgdl',
+                                strategy == 'pgdl_spec' ~ 'specialist_pgdl')) %>%
+    select(site = site_code, KGE = kge, NSE = nse, strategy) %>%
+    pivot_wider(names_from = strategy, values_from = c(KGE, NSE)) %>%
+    arrange(site) %>%
+    bind_rows(tibble(site = setdiff(plotd$site, .$site))) %>%
+    rename_with(tolower)
+
 ensemble_results <- read_csv('out/lstm_out/results.csv') %>%
-    select(-pbias) %>%
-    pivot_wider(names_from = strategy, values_from = c(KGE, NSE))
-HERE: NEED TO FILL IN THE BLANKS WITH PARAM SEARCH VALUES
-    PROBABLY STILL SHOW ALL IN THE PLOT, BUT INCLUDE TABLE IN SUPPLEMENTAL?
-param_search_results <- read_csv('out/lstm_out/param_search_skill.csv')
+    select(-pbias, site = site_code) %>%
+    pivot_wider(names_from = strategy, values_from = c(KGE, NSE)) %>%
+    mutate(KGE_specialist_pgdl = NA_real_,
+           NSE_specialist_pgdl = NA_real_) %>%
+    rename_with(tolower)
 
-left_join(plotd, ensemble_results
+plotd <- plotd %>%
+    left_join(ensemble_results, by = 'site') %>%
+    arrange(site)
 
-plotd$nse_gen =
-plotd$kge_gen =
-plotd$nse_spec =
-plotd$kge_spec =
-plotd$nse_gen_pgdl =
-plotd$kge_gen_pgdl =
-plotd$nse_spec_pgdl =
-plotd$kge_spec_pgdl =
-
-# gen_res <- retrieve_test_results(generalist_runids, strategy = 'generalist')
-# gen_res <- retrieve_test_results(generalist_runids)
-# spec_res <- retrieve_test_results(specialist_runids)
-# pgdl_res <- retrieve_test_results(pgdl_runids)
-#
-# tecr_res <- retrieve_test_results(tecr_runids)
-
-# c('site', 'nse_lm', 'nse_lm_scaled', 'nse_gen', 'nse_spec', 'nse_pgdl',
-#   'kge_lm', 'kge_lm_scaled', 'kge_gen', 'kge_spec', 'kge_pgdl')
-
-# plotd <- left_join(plotd, reduce_results(gen_res$nse, 'nse_gen', max, na.rm = TRUE))
-# plotd <- left_join(plotd, reduce_results(gen_res$kge, 'kge_gen', max, na.rm = TRUE))
-# plotd <- left_join(plotd, reduce_results(spec_res$nse, 'nse_spec', mean, na.rm = TRUE))
-# plotd <- left_join(plotd, reduce_results(spec_res$kge, 'kge_spec', mean, na.rm = TRUE))
-# plotd <- left_join(plotd, reduce_results(pgdl_res$nse, 'nse_pgdl', mean, na.rm = TRUE))
-# plotd <- left_join(plotd, reduce_results(pgdl_res$kge, 'kge_pgdl', mean, na.rm = TRUE))
+for(col in colnames(ensemble_results)){
+    col_ <- plotd[, col]
+    plotd[is.na(col_), col] <- param_search_results[is.na(col_), col]
+}
 
 ## 4. compile NEON results ####
 
@@ -189,25 +181,17 @@ for(s in plotd$site){
 
 ## 5. figure 2 ####
 
-CONSIDER RED ASTERISKS BY NAMES OF SITES THAT WERE NOT ENSEMBLED
-
 #fig Sx (same as fig 2, but showing NSE)
 
-# plotd$nse_gen = runif(27,0,1)
-# plotd$kge_gen = runif(27,0,1)
-# plotd$nse_spec = runif(27,0,1)
-# plotd$kge_spec = runif(27,0,1)
-# plotd$nse_pgdl = runif(27,0,1)
-# plotd$kge_pgdl = runif(27,0,1)
-# plotd <- select(plotd, site, nse_neon, kge_neon, nse_lm, kge_lm, nse_lm_scaled,
-#                 kge_lm_scaled, nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl,
-#                 kge_pgdl)
-plotd <- select(plotd, site,
-                nse_neon_min, nse_neon_overall, nse_neon_max,
-                kge_neon_min, kge_neon_overall, kge_neon_max,
-                nse_lm, kge_lm, nse_lm_scaled, kge_lm_scaled,
-                nse_gen, kge_gen, nse_spec, kge_spec, nse_pgdl, kge_pgdl)
-
+plotd <- plotd %>%
+    mutate(nse_lm = pmax(nse_lm, nse_lm_scaled),
+           kge_lm = pmax(kge_lm, kge_lm_scaled)) %>%
+    select(site, nse_neon_min, nse_neon_overall, nse_neon_max,
+           kge_neon_min, kge_neon_overall, kge_neon_max,
+           nse_lm, kge_lm,
+           nse_generalist, kge_generalist, nse_specialist, kge_specialist,
+           nse_generalist_pgdl, kge_generalist_pgdl,
+           nse_specialist_pgdl, kge_specialist_pgdl)
 
 plotd_nse <- select(plotd, -contains('kge'))
 plotd_nse$rowmax <- apply(select(plotd_nse, -site, -ends_with('max')), 1, max, na.rm = TRUE)
@@ -217,7 +201,8 @@ plotd_m <- as.matrix(select(plotd_nse, -site, -ends_with(c('max', 'min'))))
 plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
 plotd_m <- t(plotd_m)
 plotd_nse <- mutate(plotd_nse, nse_neon_min = ifelse(nse_neon_min < -0.05, -0.05, nse_neon_min))
-rownames(plotd_m) <- c('Published', 'Linreg', 'Linreg scaled', 'LSTM generalist', 'LSTM specialist', 'LSTM process-guided')
+rownames(plotd_m) <- c('Published', 'Linreg', 'LSTM generalist',
+                       'LSTM specialist', 'LSTM gen PGDL', 'LSTM spec PGDL')
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
     filename = 'figs/fig2_nse.png')
@@ -236,8 +221,8 @@ barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_nse$site,
                            xpd = NA, ncol = 3))
 minmax_seq <- seq(1.55, 245, by = 7)
 for(i in 1:27){
-    points(minmax_seq[i], plotd_nse$nse_neon_max[i], col = 'black', bg = 'white', xpd = NA, pch = 24, cex = 0.8)
-    points(minmax_seq[i], plotd_nse$nse_neon_min[i], col = 'black', bg = 'white', xpd = NA, pch = 25, cex = 0.8)
+    points(minmax_seq[i], plotd_nse$nse_neon_max[i], col = 'black', bg = 'white', xpd = NA, pch = 24, cex = 0.4, lwd = 0.25)
+    points(minmax_seq[i], plotd_nse$nse_neon_min[i], col = 'black', bg = 'white', xpd = NA, pch = 25, cex = 0.4, lwd = 0.25)
 }
 mtext('NEON stream/river site', 1, 3.8, font = 2)
 mtext('Nash-Sutcliffe Efficiency', 2, 1, font = 2)
