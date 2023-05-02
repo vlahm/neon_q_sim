@@ -36,8 +36,6 @@ load_q_neon <- function(site, smooth_plot = FALSE){
     window_size <- 15 #keep it odd
     transient <- window_size %/% 2
     q <- read_csv(glue('in/NEON/neon_continuous_Q/{site}.csv'))
-    # q_head <- head(q, transient) %>% select(datetime, discharge)
-    # q_tail <- tail(q, transient) %>% select(datetime, discharge)
     q_etc <- rename(q, discharge_orig = discharge) %>% mutate(indicator = 1)
     q <- select(q, datetime, discharge)
 
@@ -46,19 +44,10 @@ load_q_neon <- function(site, smooth_plot = FALSE){
 
         q <- complete(q, datetime = seq(min(datetime), max(datetime), by = '1 min'))
         q_dt <- q$datetime
-        # q_orig <- q$discharge
-
-        # q$discharge_loess <- q$discharge_lower_loess <- q$discharge_upper_loess <- NA_real_
-        # lvals <- ! is.na(q$discharge)
-        # lind <- 1:nrow(q)
-        #
-        # q$discharge_loess[lvals] <- predict(loess(q$discharge ~ I(lind), span = 0.0005, degree = 1))
 
         q <- xts(select(q, -datetime), q$datetime, tzone = 'UTC')
         q <- rollmean(q, window_size, fill = NA, align = 'center', na.rm = TRUE)
         q <- rollmean(q, window_size, fill = NA, align = 'center', na.rm = TRUE)
-
-        # q <- restore_transient(q, q_head, q_tail, transient)
 
         q <- suppressWarnings(q) %>%
             as_tibble() %>%
@@ -70,15 +59,10 @@ load_q_neon <- function(site, smooth_plot = FALSE){
             require(dygraphs)
             require(htmlwidgets)
             dygraphs::dygraph(xts(x = select(q, discharge_orig, discharge),
-            # dygraphs::dygraph(xts(x = select(q, discharge, discharge_loess),
                                   order.by = q$datetime)) %>%
                 dyRangeSelector() %>%
                 saveWidget(glue('figs/smooth_plots/{site}.html'))
         }
-
-        # q$discharge <- q$discharge_loess
-        # q$discharge_lower <- q$discharge_lower_loess
-        # q$discharge_upper <- q$discharge_upper_loess
     }
 
     q <- q %>%
@@ -135,7 +119,7 @@ load_q_lstm <- function(site){
 
 Show all missing for PRIN, OKSR,
 use GUIL N only from good years
-downsample neon to 5m
+# downsample neon to 5m
 is this set up to deal with como?
 
 for(i in seq_len(nrow(ranks))){
@@ -155,6 +139,14 @@ for(i in seq_len(nrow(ranks))){
         } else {
             stop('model type ', r, ' not recognized')
         }
+
+        need a stronger feel for the intervals present. where do we see 30, 60?
+        HERE: gotta interp N (maxgap 14) and downscale to 5
+        also interp L to 5 (maxgap 14)
+        then, just insert 2 wherever there are NAs in 1
+        ...if there are 30s and/or 60s in an otherwise 1-15 series, consider interping to 5
+        for TOMB, leave it at 60
+        for COMO?
 
         # mode_interval_dt(composite$datetime)
     }

@@ -54,7 +54,7 @@ neon_sites <- neon_areas$site_code
 
 # NEON discharge data (field measurements and continuous)
 
-#last retrieval: #2023-03-09
+#last retrieval: #2023-05-01
 if(! length(list.files('in/NEON/neon_continuous_Q/'))){
     get_neon_inst_discharge(neon_sites)
 }
