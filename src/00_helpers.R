@@ -168,6 +168,7 @@ get_neon_inst_discharge <- function(neon_sites){
             q1 <- q1 %>%
                 filter(is.na(dischargeFinalQF) | dischargeFinalQF == 0,
                        is.na(dischargeFinalQFSciRvw) | dischargeFinalQFSciRvw == 0) %>%
+                # select(discharge = withRemnUncQMedian,
                 select(discharge = maxpostDischarge,
                        datetime = endDate, discharge_lower = withRemnUncQLower2Std,
                        discharge_upper = withRemnUncQUpper2Std)
@@ -2804,4 +2805,22 @@ ms_write_netcdf <- function(df_list, path){
 
         nc_close(con)
     }
+}
+
+restore_transient <- function(x, orig_head, orig_tail, trans){
+
+    #restore leading
+    x[1:trans, ] <- left_join(select(x[1:trans, ], datetime),
+                              orig_head,
+                              by = 'datetime') %>%
+        relocate(datetime, .after = 'discharge')
+
+    #restore trailing
+    trail_trans <- (nrow(x) - (trans - 1)):nrow(x)
+    x[trail_trans, ] <- left_join(select(x[trail_trans, ], datetime),
+                                  orig_tail,
+                                  by = 'datetime') %>%
+        relocate(datetime, .after = 'discharge')
+
+    return(x)
 }

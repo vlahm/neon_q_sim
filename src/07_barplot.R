@@ -85,9 +85,9 @@ param_search_results <- read_csv('out/lstm_out/param_search_skill.csv') %>%
                                 strategy == 'pgdl_spec' ~ 'specialist_pgdl')) %>%
     select(site = site_code, KGE = kge, NSE = nse, strategy) %>%
     pivot_wider(names_from = strategy, values_from = c(KGE, NSE)) %>%
-    arrange(site) %>%
     bind_rows(tibble(site = setdiff(plotd$site, .$site))) %>%
-    rename_with(tolower)
+    rename_with(tolower) %>%
+    arrange(site)
 
 ensemble_results <- read_csv('out/lstm_out/results.csv') %>%
     select(-pbias, site = site_code) %>%
@@ -183,6 +183,7 @@ for(s in plotd$site){
 
 #fig Sx (same as fig 2, but showing NSE)
 
+statd <- plotd
 plotd <- plotd %>%
     mutate(nse_lm = pmax(nse_lm, nse_lm_scaled),
            kge_lm = pmax(kge_lm, kge_lm_scaled)) %>%
@@ -202,7 +203,7 @@ plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
 plotd_m <- t(plotd_m)
 plotd_nse <- mutate(plotd_nse, nse_neon_min = ifelse(nse_neon_min < -0.05, -0.05, nse_neon_min))
 rownames(plotd_m) <- c('Published', 'Linreg', 'LSTM generalist',
-                       'LSTM specialist', 'LSTM gen PGDL', 'LSTM spec PGDL')
+                       'LSTM specialist', 'LSTM process-guided generalist', 'LSTM process-guided specialist')
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
     filename = 'figs/fig2_nse.png')
@@ -218,11 +219,14 @@ barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_nse$site,
         col = pal, las = 2, ylab = '',
         legend.text = TRUE, border = 'transparent', yaxt = 'n',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
-                           xpd = NA, ncol = 3))
+                           xpd = NA, ncol = 3, text.width = c(30, 40, 50)))
+segments(0.5, -0.045, 190, -0.045, xpd = NA, lwd = 0.1, lty = 2)
 minmax_seq <- seq(1.55, 245, by = 7)
 for(i in 1:27){
-    points(minmax_seq[i], plotd_nse$nse_neon_max[i], col = 'black', bg = 'white', xpd = NA, pch = 24, cex = 0.4, lwd = 0.25)
-    points(minmax_seq[i], plotd_nse$nse_neon_min[i], col = 'black', bg = 'white', xpd = NA, pch = 25, cex = 0.4, lwd = 0.25)
+    points(minmax_seq[i], plotd_nse$nse_neon_max[i], col = 'black', bg = 'white',
+           xpd = NA, pch = 24, cex = 0.4, lwd = 0.25)
+    points(minmax_seq[i], plotd_nse$nse_neon_min[i], col = 'black', bg = 'white',
+           xpd = NA, pch = 25, cex = 0.4, lwd = 0.25)
 }
 mtext('NEON stream/river site', 1, 3.8, font = 2)
 mtext('Nash-Sutcliffe Efficiency', 2, 1, font = 2)
@@ -238,7 +242,8 @@ plotd_m <- as.matrix(select(plotd_kge, -site, -ends_with(c('max', 'min'))))
 plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
 plotd_m <- t(plotd_m)
 plotd_kge <- mutate(plotd_kge, kge_neon_min = ifelse(kge_neon_min < -0.05, -0.05, kge_neon_min))
-rownames(plotd_m) <- c('Published', 'Linreg', 'Linreg scaled', 'LSTM generalist', 'LSTM specialist', 'LSTM process-guided')
+rownames(plotd_m) <- c('Published', 'Linreg', 'LSTM generalist',
+                       'LSTM specialist', 'LSTM process-guided generalist', 'LSTM process-guided specialist')
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
     filename = 'figs/fig2_kge.png')
@@ -254,20 +259,24 @@ barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_kge$site,
         col = pal, las = 2, ylab = '',
         legend.text = TRUE, border = 'transparent', yaxt = 'n',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
-                           xpd = NA, ncol = 3))
+                           xpd = NA, ncol = 3, text.width = c(30, 40, 50)))
+segments(0.5, -0.045, 190, -0.045, xpd = NA, lwd = 0.1, lty = 2)
 minmax_seq <- seq(1.55, 245, by = 7)
 for(i in 1:27){
-    points(minmax_seq[i], plotd_kge$kge_neon_max[i], col = 'black', bg = 'white', xpd = NA, pch = 24, cex = 0.8)
-    points(minmax_seq[i], plotd_kge$kge_neon_min[i], col = 'black', bg = 'white', xpd = NA, pch = 25, cex = 0.8)
+    points(minmax_seq[i], plotd_kge$kge_neon_max[i], col = 'black', bg = 'white',
+           xpd = NA, pch = 24, cex = 0.4, lwd = 0.25)
+    points(minmax_seq[i], plotd_kge$kge_neon_min[i], col = 'black', bg = 'white',
+           xpd = NA, pch = 25, cex = 0.4, lwd = 0.25)
 }
-mtext('NEON stream/river Site', 1, 3.8, font = 2)
+mtext('NEON stream/river site', 1, 3.8, font = 2)
 mtext('Kling-Gupta Efficiency', 2, 1, font = 2)
 axis(2, seq(0, 1, 0.1), line = -0.9, tcl = -0.3, padj = 1)
 dev.off()
 
 ## 6. table 4 ####
 
-plotd %>%
+statd %>%
+    select(-ends_with(c('min', 'max'))) %>%
     summarize(across(starts_with(c('nse', 'kge')),
                      list(median = ~median(., na.rm = T),
                           mean = ~mean(., na.rm = T),
@@ -295,16 +304,17 @@ range(n_field_meas)
 mean(n_field_meas)
 
 #best scores across models
-maxd <- plotd %>%
+maxd_ <- select(statd, -ends_with(c('neon_min', 'neon_max')))
+maxd <- maxd_ %>%
     rowwise() %>%
-    mutate(max_nse = max(c_across(starts_with('nse') & -nse_neon), na.rm = TRUE),
-           max_kge = max(c_across(starts_with('kge') & -kge_neon), na.rm = TRUE),
-           bestmod_nse = which.max(c_across(starts_with('nse') & -nse_neon)),
-           bestmod_kge = which.max(c_across(starts_with('kge') & -kge_neon))) %>%
-    select(site, ends_with('neon'), starts_with(c('max', 'bestmod')))
-maxd$bestmod_nse <- grep('^nse_', colnames(plotd), value = TRUE)[-1][maxd$bestmod_nse]
+    mutate(max_nse = max(c_across(starts_with('nse') & -contains('neon')), na.rm = TRUE),
+           max_kge = max(c_across(starts_with('kge') & -contains('neon')), na.rm = TRUE),
+           bestmod_nse = which.max(c_across(starts_with('nse') & -contains('neon'))),
+           bestmod_kge = which.max(c_across(starts_with('kge') & -contains('neon')))) %>%
+    select(site, contains('neon'), starts_with(c('max', 'bestmod')))
+maxd$bestmod_nse <- grep('^nse_', colnames(maxd_), value = TRUE)[-1][maxd$bestmod_nse]
 maxd$bestmod_nse <- substr(maxd$bestmod_nse, 5, nchar(maxd$bestmod_nse))
-maxd$bestmod_kge <- grep('^kge_', colnames(plotd), value = TRUE)[-1][maxd$bestmod_kge]
+maxd$bestmod_kge <- grep('^kge_', colnames(maxd_), value = TRUE)[-1][maxd$bestmod_kge]
 maxd$bestmod_kge <- substr(maxd$bestmod_kge, 5, nchar(maxd$bestmod_kge))
 
 print(maxd, n = 50)
@@ -320,20 +330,20 @@ group_by(maxd) %>%
 
 #and for neon data
 group_by(maxd) %>%
-    summarize(median_nse = median(nse_neon, na.rm = TRUE),
-              median_kge = median(kge_neon, na.rm = TRUE))
+    summarize(median_nse = median(nse_neon_overall, na.rm = TRUE),
+              median_kge = median(kge_neon_overall, na.rm = TRUE))
 
 #at how many sites did we achieve better efficiencies?
-filter(maxd, max_kge > kge_neon)
+filter(maxd, max_kge > kge_neon_overall)
 # filter(maxd, max_nse > nse_neon)
 
 #how many neon sites' published records have KGE < 0.7?
-filter(maxd, kge_neon < 0.7)
+filter(maxd, kge_neon_overall < 0.7)
 # filter(maxd, nse_neon < 0.7)
 
-#mean KGE of the 7 sites we raised above the 0.7 mark *approx
+#mean KGE of the sites we raised above the 0.7 mark
 maxd %>%
-    filter(kge_neon < 0.7,
-           max_kge > 0.69) %>%  #*
+    filter(kge_neon_overall < 0.7,
+           max_kge > 0.7) %>%
     pull(max_kge) %>%
     mean()

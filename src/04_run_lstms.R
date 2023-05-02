@@ -213,7 +213,7 @@ run_lstm('generalist', ensembles_gen$POSE, ensemble = TRUE)
 # }
 
 
-# 6. gather results of ensembles ####
+# 6. evaluate ensembles; gather results ####
 
 ## if you ran ensembles on a cluster, you'll need to adjust paths for your local machine
 ## using this commented chunk
