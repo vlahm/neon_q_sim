@@ -31,6 +31,7 @@ if(! dir.exists('out/lstm_runs')) stop("you need to run src/04_run_lstms.R. It w
 ## 1. setup ####
 
 nh_dir <- 'out/lstm_runs'
+dir.create('out/neon_wateryear_assess', showWarnings = FALSE)
 
 # # specify run IDs for all tested generalist models
 # generalist_runids <- 1468:1520
@@ -144,9 +145,6 @@ for(s in plotd$site){
             ) %>%
             as_tibble() %>%
             select(datetime, discharge.man = val_x, discharge.aut = val_y)
-
-    # } else {
-    #     cmp <- left_join(neon_q_manual, neon_q_auto, by = 'datetime', suffix = c('.man', '.aut'))
     }
 
     plotd[i, 'nse_neon_overall'] <- NSE(cmp$discharge.aut, cmp$discharge.man)
@@ -158,18 +156,24 @@ for(s in plotd$site){
         group_by(wateryr) %>%
         group_split()
 
+    #needed to build composite Q
+    suppressWarnings({
+        purrr::reduce(cmp_splt, function(x, y){
+            y_ <- tibble(wateryr = y$wateryr[1],
+                         nse = NSE(y$discharge.aut, y$discharge.man),
+                         kge = KGE(y$discharge.aut, y$discharge.man))
+            # if(nrow(y) < 5) { y_$nse <- NA; y_$kge <- NA }
+            bind_rows(x, y_)
+        }, .init = tibble()) %>%
+            write_csv(glue('out/neon_wateryear_assess/{s}.csv'))
+    })
+
     if(s == 'OKSR'){
         cmp_splt <- purrr::keep(cmp_splt, ~length(na.omit(.$discharge.aut)) >= 2)
     } else {
         cmp_splt <- purrr::keep(cmp_splt, ~length(na.omit(.$discharge.aut)) >= 5)
     }
 
-    # ref <- mean(cmp$discharge.man, na.rm = TRUE)
-    # refsd <- sd(cmp$discharge.man, na.rm = TRUE)
-    # nse_wy <- purrr::map(cmp_splt, ~nse_customref(.$discharge.aut, .$discharge.man,
-    #                                               refmean = ref))
-    # kge_wy <- purrr::map(cmp_splt, ~kge_customref(.$discharge.aut, .$discharge.man,
-    #                                               refmean = ref, refsd = refsd))
     nse_wy <- purrr::map(cmp_splt, ~NSE(.$discharge.aut, .$discharge.man))
     kge_wy <- purrr::map(cmp_splt, ~KGE(.$discharge.aut, .$discharge.man))
 
