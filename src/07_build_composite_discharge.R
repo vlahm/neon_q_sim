@@ -9,6 +9,8 @@ library(lubridate)
 library(zoo)
 library(xts)
 library(imputeTS)
+library(dygraphs)
+library(htmlwidgets)
 
 #see step 2 in src/lstm_dungeon/README.txt for installing conda environment
 use_condaenv('nh2')
@@ -28,19 +30,22 @@ ranks <- read_csv('cfg/model_ranks.csv')
 results <- read_csv('out/lstm_out/results.csv')
 
 dir.create('figs/smooth_plots', showWarnings = FALSE)
+dir.create('figs/composite_plots', showWarnings = FALSE)
+dir.create('out/composite_series', showWarnings = FALSE)
 
 # 1. helpers ####
 
 prepare_q_neon <- function(site, smooth_plot = FALSE){
 
     window_size <- 15 #keep it odd
-    transient <- window_size %/% 2
     q <- read_csv(glue('in/NEON/neon_continuous_Q/{site}.csv'))
-    q_bounds <- select(q, -site_code, -discharge)
-    q_orig <- select(q, datetime, discharge_orig = discharge)
-    q <- select(q, datetime, discharge)
 
     if(site != 'TOMB'){
+
+        transient <- window_size %/% 2
+        q_bounds <- select(q, -site_code, -discharge)
+        q_orig <- select(q, datetime, discharge_orig = discharge)
+        q <- select(q, datetime, discharge)
 
         #fill out missing data (make explicit) to one minute interval
         q <- complete(q, datetime = seq(min(datetime), max(datetime), by = '1 min'))
@@ -70,7 +75,8 @@ prepare_q_neon <- function(site, smooth_plot = FALSE){
         #need to interpolate uncertainty too, so it isn't lost during downsampling
         q <- left_join(tibble(discharge = q, datetime = q_dt), q_bounds, by = 'datetime') %>%
             slice((transient + 1):(length(q) - transient)) %>%
-            mutate(across(-datetime, ~na_seadec(ts(., deltat = 1/1440), maxgap = 14)))
+            mutate(across(-datetime, ~na_interpolation(., , maxgap = 14)))
+            # mutate(across(-datetime, ~na_seadec(ts(., deltat = 1/1440), maxgap = 14)))
 
         #downsample to even 5 minute interval. priority breakdown:
         #   1. preserve observations originally on minutes divisible by 5
@@ -85,6 +91,8 @@ prepare_q_neon <- function(site, smooth_plot = FALSE){
             slice(if(any(m5)) which(m5)[1] else if(any(! is.na(discharge))) which(! is.na(discharge))[1] else 1) %>%
             ungroup() %>%
             select(-m5)
+
+        if(any(duplicated(q$datetime))) warning('dupes in ', site)
 
         if(smooth_plot){
 
@@ -143,7 +151,10 @@ prepare_q_lm <- function(site){
         ungroup() %>%
         select(-m5)
 
-    q$discharge_Ls <- na_seadec(ts(q$discharge_Ls, deltat = 1/288), maxgap = 2)
+    if(any(duplicated(q$datetime))) warning('dupes in ', site)
+
+    # q$discharge_Ls <- na_seadec(ts(q$discharge_Ls, deltat = 1/288), maxgap = 2)
+    q$discharge_Ls <- na_interpolation(q$discharge_Ls, maxgap = 2)
 
     q$source <- ifelse(strategy == 'lm_out', 'Linreg', 'Linreg_scaled')
 
@@ -164,88 +175,142 @@ prepare_q_lstm <- function(site){
     return(q)
 }
 
-# 2. ####
+# 2. build composite series ####
 
-# for(i in 2:nrow(ranks)){
-#     s <- ranks$site[i]
-#     zz = try(load_q_neon(site = s, smooth_plot = TRUE))
-#     if(! inherits(zz, 'try-error')) feather::write_feather(zz, glue('~/Desktop/q_sim_junk/clean_N/{s}.feather'))
-# }
-# for(i in 2:nrow(ranks)){
-#     s <- ranks$site[i]
-#     qq = q_eval %>%
-#         filter(site == !!s) %>%
-#         distinct(final_qual)
-#     print(s); print(qq)
-# }
 for(i in seq_len(nrow(ranks))){
 
     s <- ranks$site[i]
     rankvec <- unlist(ranks[i, 2:4])
 
-    composite <- tibble()
-    for(r in rankvec){
+    composite <- tibble(datetime = seq(as.POSIXct('2014-01-01', tz = 'UTC'),
+                                       as.POSIXct('2024-01-01', tz = 'UTC'),
+                                       by = '5 min'),
+                        src_n = NA_integer_)
 
+    pgdl <- unname(grep('G|S|PG|PS', rankvec, value = TRUE))
+    rankvec <- grep('G|S|PG|PS', rankvec, value = TRUE, invert = TRUE)
+    rankvec <- rankvec[! is.na(rankvec)]
+
+    for(j in seq_along(rankvec)){
+
+        r <- rankvec[j]
         if(r == 'N'){
-            # composite <- bind_rows(composite, prepare_q_neon(site = s, smooth_plot = TRUE))
-            composite <- feather::read_feather(glue('~/Desktop/q_sim_junk/clean_N/{s}.feather'))
+
+            comp_ <- prepare_q_neon(site = s, smooth_plot = TRUE)
 
             good_months <- q_eval %>%
                 filter(site == !!s, final_qual %in% c('Tier1', 'Tier2')) %>%
                 select(year, month) %>%
+                distinct() %>%
                 mutate(good = 1)
 
-            composite <- composite %>%
-                mutate(year = year(datetime),
-                       month = month(datetime)) %>%
-                left_join(good_months, by = c('year', 'month'))
+            comp_ <- mutate(comp_, year = year(datetime), month = month(datetime))
 
-            neon_pass <- composite %>%
-                filter(! is.na(good)) %>%
-                select(-year, -month, -good)
+            if(s == 'TOMB'){
+                comp_$good <- 1
+            } else {
+                comp_ <- left_join(comp_, good_months, by = c('year', 'month'))
+            }
 
             good_wys <- read_csv(glue('out/neon_wateryear_assess/{s}.csv')) %>%
                 filter(nse >= 0.5, kge >= 0.5)
 
-            neon_backup <- composite %>%
+            neon_backup <- comp_ %>%
                 filter(is.na(good)) %>%
                 mutate(wateryr = year,
                        wateryr = ifelse(month >= 10, wateryr + 1, wateryr)) %>%
                 filter(wateryr %in% good_wys$wateryr) %>%
-                select(-year, -month, -good, -wateryr)
+                select(-year, -month, -good, -wateryr) %>%
+                mutate(src_n = 3)
+
+            comp_ <- comp_ %>%
+                filter(! is.na(good)) %>%
+                select(-year, -month, -good) %>%
+                mutate(src_n = j)
 
         } else if(r == 'L'){
-            composite <- bind_rows(composite, prepare_q_lm(site = s))
-        } else if(r %in% c('G', 'S', 'PG', 'PS')){
-            composite <- bind_rows(composite, prepare_q_lstm(site = s))
+
+            comp_ <- prepare_q_lm(site = s) %>%
+                filter(! is.na(discharge_Ls)) %>%
+                mutate(src_n = j)
+
         } else {
             stop('model type ', r, ' not recognized')
         }
 
-        if(rankvec[1] == 'N')
-
-        #HERE: need a stronger feel for the intervals present. where do we see 30, 60?
-        # also need to know if usgs/hj/niwot all evenly on 5min
-        # first, replace NAs after running rollmean
-        # then, interp N (maxgap 14) and downscale to 5
-        # do not interpolate uncertainty
-        # also interp L to 5 (maxgap 14); will require complete to 1 if usgs/hj/niwot not evenly on 5min
-        then, just insert r-2 wherever there are NAs in r-1
-        ...if there are 30s and/or 60s in an otherwise 1-15 series, consider interping to 5
-        for TOMB, leave it at 60
-        for COMO?
-        Show all missing for PRIN, OKSR lm
-        use GUIL N only from good years
-        NEED TO RERUN NEON BLOCK (and stop reading feathers in r == N
-        PUT LOW QUAL N BACK IF THERE ARE STILL GAPS?
-            ONLY IF IT PASSES neon_wateryear_assess
-
-        # mode_interval_dt(composite$datetime)
+        if(j == 1){
+            composite[composite$datetime %in% comp_$datetime, 'src_n'] <- 1
+            r1 <- comp_
+        } else {
+            popul_inds <- get_populatable_indices(composite$src_n, mingap = 300)
+            comp_ <- filter(comp_, datetime %in% composite$datetime[popul_inds])
+            composite[popul_inds & composite$datetime %in% comp_$datetime, 'src_n'] <- 2
+            r2 <- comp_
+        }
     }
-    readLines(n=1)
 
-    # composite %>%
-    #     complete() %>%
-    #     na_seadec(up to 15 m) %>%
-    #     write_csv()
+    if('N' %in% rankvec){
+        popul_inds <- get_populatable_indices(composite$src_n, mingap = 300)
+        neon_backup <- filter(neon_backup, datetime %in% composite$datetime[popul_inds])
+        composite[popul_inds & composite$datetime %in% neon_backup$datetime, 'src_n'] <- 3
+    }
+
+    if(length(pgdl)){
+
+        comp_ <- prepare_q_lstm(site = s) %>%
+            filter(! is.na(discharge_Ls)) %>%
+            mutate(src_n = 4)
+
+        popul_inds <- get_populatable_indices(composite$src_n, mingap = 300)
+        comp_ <- filter(comp_, datetime %in% composite$datetime[popul_inds])
+        composite[popul_inds & composite$datetime %in% comp_$datetime, 'src_n'] <- 4
+    }
+
+    d <- r1
+    if(exists('r2')) d <- bind_rows(d, r2)
+    if(exists('neon_backup')) d <- bind_rows(d, neon_backup)
+    if(length(pgdl)) d <- bind_rows(d, comp_)
+
+    #remove leading/trailing unpopulated rows
+    got <- which(! is.na(composite$src_n))
+    composite <- composite[do.call(`:`, as.list(range(got))), ]
+
+    composite <- left_join(composite, d, by = c('datetime', 'src_n')) %>%
+        select(-src_n) %>%
+        arrange(datetime)
+
+    write.csv(composite, glue('out/composite_series/{s}.csv'))
+
+    suppressWarnings(rm(list = c('r1', 'r2', 'neon_backup', 'pgdl')))
+
+    #files too big and render too slow if bounds included in plot
+    q_plot <- read_csv(glue('in/NEON/neon_continuous_Q/{s}.csv')) %>%
+        select(datetime, discharge_original = discharge) %>%
+               # lower95_original = discharge_lower,
+               # upper95_original = discharge_upper) %>%
+        full_join(composite, by = 'datetime') %>%
+        full_join(select(read_csv(glue('in/NEON/neon_field_Q/{s}.csv')),
+                         datetime, discharge_field_measured = discharge),
+                  by = 'datetime') %>%
+        select(-discharge_lower95_Ls, -discharge_upper95_Ls) %>%
+        arrange(datetime)
+        # rename(lower95_composite = discharge_lower95_Ls,
+        #        upper95_composite = discharge_upper95_Ls)
+
+    sources <- na.omit(unique(q_plot$source))
+    for(src in sources){
+        newcol <- paste0('discharge_', src)
+        if(src == 'NEON') newcol <- paste0(newcol, '_mod')
+        popul_inds <- !is.na(q_plot$source) & q_plot$source == src
+        q_plot[[newcol]] <- NA_real_
+        q_plot[popul_inds, newcol] <- q_plot$discharge_Ls[popul_inds]
+    }
+
+    q_plot <- select(q_plot, -source, -discharge_Ls)
+
+    dygraphs::dygraph(xts(x = select(q_plot, -datetime),
+                          order.by = q_plot$datetime)) %>%
+        dySeries('discharge_field_measured', pointSize = 4, pointShape = 'ex', strokeWidth = 2) %>%
+        dyRangeSelector() %>%
+        saveWidget(glue('figs/composite_plots/{s}.html'))
 }

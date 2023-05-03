@@ -185,9 +185,10 @@ for(s in plotd$site){
 
 ## 5. figure 2 ####
 
+statd <- plotd
+
 #fig Sx (same as fig 2, but showing NSE)
 
-statd <- plotd
 plotd <- plotd %>%
     mutate(nse_lm = pmax(nse_lm, nse_lm_scaled),
            kge_lm = pmax(kge_lm, kge_lm_scaled)) %>%
@@ -339,11 +340,11 @@ group_by(maxd) %>%
 
 #at how many sites did we achieve better efficiencies?
 filter(maxd, max_kge > kge_neon_overall)
-# filter(maxd, max_nse > nse_neon)
+filter(maxd, max_nse > nse_neon_overall)
 
-#how many neon sites' published records have KGE < 0.7?
+#how many neon sites' published records have efficiencies < 0.7?
 filter(maxd, kge_neon_overall < 0.7)
-# filter(maxd, nse_neon < 0.7)
+filter(maxd, nse_neon_overall < 0.7)
 
 #mean KGE of the sites we raised above the 0.7 mark
 maxd %>%

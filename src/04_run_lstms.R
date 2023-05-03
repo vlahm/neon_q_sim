@@ -362,6 +362,7 @@ for(i in seq_along(pred_q)){
                Q_neon_release2023_qcpass = discharge_auto) %>%
         filter(! is.na(Q_predicted)) %>%
         arrange(date) %>%
+        distinct(date, .keep_all = TRUE) %>%
         write_csv(glue('out/lstm_out/predictions/{neon_site}.csv'))
 
     ## plot predictions vs continuous NEON Q

@@ -2651,7 +2651,7 @@ rle2 <- function(x){
     ends <- cumsum(r$lengths)
 
     r <- tibble(values = r$values,
-                starts = c(1, ends[-length(ends)] + 1),
+                starts = as.integer(c(1, ends[-length(ends)] + 1)),
                 stops = ends,
                 lengths = r$lengths)
 
@@ -2823,4 +2823,16 @@ restore_transient <- function(x, orig_head, orig_tail, trans){
         relocate(datetime, .after = 'discharge')
 
     return(x)
+}
+
+get_populatable_indices <- function(src_column, mingap){
+
+    popul_inds <- rle2(is.na(src_column)) %>%
+        filter(values, lengths >= 300) %>%
+        {mapply(function(x, y) x:y, .$starts, .$stops)} %>%
+        unlist()
+
+    popul_inds <- seq_along(src_column) %in% popul_inds #as logical
+
+    return(popul_inds)
 }
