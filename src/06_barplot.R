@@ -207,7 +207,7 @@ plotd_m <- as.matrix(select(plotd_nse, -site, -ends_with(c('max', 'min'))))
 plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
 plotd_m <- t(plotd_m)
 plotd_nse <- mutate(plotd_nse, nse_neon_min = ifelse(nse_neon_min < -0.05, -0.05, nse_neon_min))
-rownames(plotd_m) <- c('Published', 'Linreg', 'LSTM generalist',
+rownames(plotd_m) <- c('NEON published', 'Linear regression', 'LSTM generalist',
                        'LSTM specialist', 'LSTM process-guided generalist', 'LSTM process-guided specialist')
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
@@ -224,7 +224,7 @@ barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_nse$site,
         col = pal, las = 2, ylab = '',
         legend.text = TRUE, border = 'transparent', yaxt = 'n',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
-                           xpd = NA, ncol = 3, text.width = c(30, 40, 50)))
+                           xpd = NA, ncol = 3, text.width = c(40, 40, 50)))
 segments(0.5, -0.045, 190, -0.045, xpd = NA, lwd = 0.1, lty = 2)
 minmax_seq <- seq(1.55, 245, by = 7)
 for(i in 1:27){
@@ -247,7 +247,7 @@ plotd_m <- as.matrix(select(plotd_kge, -site, -ends_with(c('max', 'min'))))
 plotd_m[! is.na(plotd_m) & plotd_m < -0.05] <- -0.05
 plotd_m <- t(plotd_m)
 plotd_kge <- mutate(plotd_kge, kge_neon_min = ifelse(kge_neon_min < -0.05, -0.05, kge_neon_min))
-rownames(plotd_m) <- c('Published', 'Linreg', 'LSTM generalist',
+rownames(plotd_m) <- c('NEON published', 'Linear regression', 'LSTM generalist',
                        'LSTM specialist', 'LSTM process-guided generalist', 'LSTM process-guided specialist')
 
 png(width = 8, height = 4, units = 'in', type = 'cairo', res = 300,
@@ -264,7 +264,7 @@ barplot(plotd_m, beside = TRUE, ylim = c(0, 1), names.arg = plotd_kge$site,
         col = pal, las = 2, ylab = '',
         legend.text = TRUE, border = 'transparent', yaxt = 'n',
         args.legend = list(x = 163, y=1.2, bty = 'n', cex = 0.9, border = FALSE,
-                           xpd = NA, ncol = 3, text.width = c(30, 40, 50)))
+                           xpd = NA, ncol = 3, text.width = c(40, 40, 50)))
 segments(0.5, -0.045, 190, -0.045, xpd = NA, lwd = 0.1, lty = 2)
 minmax_seq <- seq(1.55, 245, by = 7)
 for(i in 1:27){

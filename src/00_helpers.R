@@ -129,25 +129,22 @@ get_neon_field_discharge <- function(neon_sites){
     }
 }
 
-get_neon_inst_discharge <- function(neon_sites){
+get_neon_inst_discharge <- function(neon_sites, clean_only = TRUE){
 
     dir.create('in/NEON', showWarnings = FALSE)
     dir.create('in/NEON/neon_continuous_Q')
 
+    if(! clean_only){
+        dir.create('in/NEON/neon_continuous_Q_withflags')
+    }
+
     for(i in seq_along(neon_sites)){
 
         s <- neon_sites[i]
-        # print(s)
-
-        #continuous discharge measurements
-        # if(file.exists(paste0('debris/neon_q_dl/', s, '.rds'))) next #
 
         qd <- neonUtilities::loadByProduct('DP4.00130.001', site = s,
                                            check.size = FALSE,
                                            release = 'RELEASE-2023')
-
-        # write_lines(paste0(s, '\n'), 'log/neonq_qc.txt', append = T) #
-        # saveRDS(qd, paste0('debris/neon_q_dl', s, '.rds')) #
 
         q1 <- q2 <- tibble()
 
@@ -155,44 +152,27 @@ get_neon_inst_discharge <- function(neon_sites){
 
             q1 <- qd$csd_continuousDischarge
 
-            # xx = table(q1$dischargeFinalQF, useNA = 'always')
-            # write_lines('FinalQF', 'log/neonq_qc.txt', append = T)
-            # write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
-            # write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
-            # xx = table(q1$dischargeFinalQFSciRvw, useNA = 'always')
-            # write_lines('FinalQFSciRvm', 'log/neonq_qc.txt', append = T)
-            # write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
-            # write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
-            # write_lines('', 'log/neonq_qc.txt', append = T)
+            if(clean_only){
+                q1 <- filter(q1, is.na(dischargeFinalQF) | dischargeFinalQF == 0,
+                             is.na(dischargeFinalQFSciRvw) | dischargeFinalQFSciRvw == 0)
+            }
 
-            q1 <- q1 %>%
-                filter(is.na(dischargeFinalQF) | dischargeFinalQF == 0,
-                       is.na(dischargeFinalQFSciRvw) | dischargeFinalQFSciRvw == 0) %>%
-                # select(discharge = withRemnUncQMedian,
-                select(discharge = maxpostDischarge,
-                       datetime = endDate, discharge_lower = withRemnUncQLower2Std,
-                       discharge_upper = withRemnUncQUpper2Std)
+            q1 <- select(q1, discharge = maxpostDischarge,
+                         datetime = endDate, discharge_lower = withRemnUncQLower2Std,
+                         discharge_upper = withRemnUncQUpper2Std)
         }
 
         if('csd_continuousDischargeUSGS' %in% names(qd)){
 
             q2 <- qd$csd_continuousDischargeUSGS
 
-            # xx = table(q2$dischargeFinalQF, useNA = 'always')
-            # write_lines('FinalQF', 'log/neonq_qc.txt', append = T)
-            # write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
-            # write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
-            # xx = table(q2$dischargeFinalQFSciRvw, useNA = 'always')
-            # write_lines('FinalQFSciRvm', 'log/neonq_qc.txt', append = T)
-            # write_lines(paste(names(xx), collapse = ', '), 'log/neonq_qc.txt', append = T)
-            # write_lines(paste(xx, collapse = ', '), 'log/neonq_qc.txt', append = T)
-            # write_lines('', 'log/neonq_qc.txt', append = T)
+            if(clean_only){
+                q2 <- filter(q2, is.na(dischargeFinalQFSciRvw) | dischargeFinalQFSciRvw == 0)
+            }
 
-            q2 <- q2 %>%
-                filter(is.na(dischargeFinalQFSciRvw) | dischargeFinalQFSciRvw == 0) %>%
-                select(discharge = usgsDischarge,
-                       datetime = endDate, discharge_lower = withRegressionUncQLower2Std,
-                       discharge_upper = withRegressionUncQUpper2Std)
+            q2 <- select(q2, discharge = usgsDischarge,
+                   datetime = endDate, discharge_lower = withRegressionUncQLower2Std,
+                   discharge_upper = withRegressionUncQUpper2Std)
         }
 
         if(nrow(q1) && nrow(q2)){
@@ -203,12 +183,14 @@ get_neon_inst_discharge <- function(neon_sites){
             q <- q2
         }
 
-        # write_lines('---------------\n\n', 'log/neonq_qc.txt', append = T)
-
         q <- as_tibble(q) %>%
             mutate(site_code = s)
 
-        write_csv(q, glue('in/NEON/neon_continuous_Q/{s}.csv'))
+        if(clean_only){
+            write_csv(q, glue('in/NEON/neon_continuous_Q/{s}.csv'))
+        } else {
+            write_csv(q, glue('in/NEON/neon_continuous_Q_withflags/{s}.csv'))
+        }
     }
 }
 
@@ -2559,7 +2541,7 @@ polygon_with_gaps <- function(df){
 }
 
 polygon_with_gaps2 <- function(df, gapcol, lowval, highval, col = 'blue',
-                               invert = FALSE, border = col){
+                               invert = FALSE, border = col, hashed = FALSE){
 
     if(invert){
         rl = rle(is.na(df[[gapcol]]))
@@ -2587,16 +2569,54 @@ polygon_with_gaps2 <- function(df, gapcol, lowval, highval, col = 'blue',
 
             d <- NAchunks[[i]]
 
-            # if(nrow(d) == 1 || difftime(d$datetime[nrow(d)], d$datetime[1], units = 'mins') < 60){
-            #     d <- bind_rows(d,
-            #                    mutate(d, datetime = datetime[1] + 60 * 60))
-            # }
+            if(hashed){
+                polygon(x = c(d$datetime, rev(d$datetime)),
+                        y = c(rep(lowval, nrow(d)), rep(highval, nrow(d))),
+                        col = col, border = NA, angle = 45, density = 30)
+            } else {
+                polygon(x = c(d$datetime, rev(d$datetime)),
+                        y = c(rep(lowval, nrow(d)), rep(highval, nrow(d))),
+                        col = col, border = border)
+            }
+        }
+    }
+}
 
-            polygon(x=c(d$datetime, rev(d$datetime)),
-                    y=c(rep(lowval, nrow(d)),
-                        rep(highval, nrow(d))),
-                    col=col, border=border)
-                    # col=adjustcolor(col, alpha.f=0.2), border=NA)
+plot_gap_points <- function(d, dfill, dmask = NULL, mingap){
+
+    rl <- rle(! is.na(d$discharge))
+    vv <- ! rl$values
+    chunkfac <- rep(cumsum(vv), rl$lengths)
+    chunkfac[chunkfac == 0] <- 1
+    chunks <- split(d, chunkfac)
+    NAchunks <- lapply(chunks, function(x) x[is.na(x$discharge), ])
+    NAchunks <- Filter(function(x) difftime(x$datetime[nrow(x)], x$datetime[1], units = 'hours') >= mingap,
+                       NAchunks)
+
+    if(! is.null(dmask)){
+
+        rl <- rle(! is.na(dmask$discharge))
+        vv <- ! rl$values
+        chunkfac <- rep(cumsum(vv), rl$lengths)
+        chunkfac[chunkfac == 0] <- 1
+        chunks <- split(dmask, chunkfac)
+        maskchunks <- lapply(chunks, function(x) x[is.na(x$discharge), ])
+        maskchunks <- Filter(function(x) difftime(x$datetime[nrow(x)], x$datetime[1], units = 'hours') >= mingap,
+                             maskchunks)
+
+        NAchunks <- Filter(function(x) any(sapply(maskchunks, function(y){
+            abs(difftime(min(x$datetime), min(y$datetime))) < 10
+        })), NAchunks)
+    }
+
+    if(length(NAchunks)){
+
+        for(j in 1:length(NAchunks)){
+
+            missing_dts <- NAchunks[[j]]$datetime[is.na(NAchunks[[j]]$discharge)]
+            points(dfill$datetime[dfill$datetime %in% missing_dts],
+                   dfill$Q_predicted[dfill$datetime %in% missing_dts],
+                   col = 'black', pch = '.')
         }
     }
 }

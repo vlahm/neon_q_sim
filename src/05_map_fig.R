@@ -15,14 +15,15 @@ library(osmdata)
 if(! exists('ts_plot')) source('src/00_helpers.R')
 if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 
+dir.create('figs/map_components', showWarnings = FALSE)
+
 ## 1. load data ####
 
 neon_sites <- read_csv('in/NEON/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
     st_as_sf(coords = c('Longitude', 'Latitude'))
 
-ms_site_codes_in_use <- c('GSWS01', 'GSWS06', 'GSWS07', 'GSWS08', 'GSLOOK',
-                          'ALBION', 'SADDLE')
+ms_site_codes_in_use <- c('GSWS01', 'GSWS08', 'GSLOOK', 'ALBION', 'SADDLE')
 
 ms_sites <- macrosheds::ms_load_sites() %>%
     filter(site_type == 'stream_gauge',
