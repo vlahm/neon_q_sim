@@ -1,6 +1,6 @@
 # Mike Vlah
 # vlahm13@gmail.com
-# last edit: 2023-02-28
+# last edit: 2023-05-16
 
 library(tidyverse)
 library(neonUtilities)
@@ -18,20 +18,26 @@ if(! dir.exists('out/lm_out')) source('src/02_regression.R', local = new.env())
 if(! dir.exists('in/lstm_data')) source('src/03_organize_camels_macrosheds_nhm.R', local = new.env())
 if(! dir.exists('out/lstm_runs')) stop("you need to run src/04_run_lstms.R. It will take many days unless run on a cluster. Or use our bundled results.")
 
+# 0. setup ####
+
+if(! length(list.files('in/NEON/neon_continuous_Q_withflags/'))){
+    get_neon_inst_discharge(neon_sites, clean_only = FALSE)
+}
+
 # 1. plot ####
 
 png(width = 8, height = 5, units = 'in', type = 'cairo', res = 300,
-    filename = 'figs/fig3.png')
+    filename = 'figs/ts_plot.png')
 par(mfrow = c(2, 2), mar = c(2, 3, 1, 1), oma = c(2, 2, 0, 0))
-ts_plot('REDB', 2019) #0.932
+ts_plot('REDB', 2019)
 legend('topright', legend = c('Predicted', 'NEON modeled  '),
        col = c('red', 'gray50'), lty = 1, bty = 'n')
-legend('topright', legend = c('', '','NEON measured'),
-       col = c('transparent', 'transparent', 'black'), pch = 1, bty = 'n')
-ts_plot('FLNT', 2018) #0.970
-# ts_plot('BLUE', 2020, T)
-ts_plot('LEWI', 2019) #0.739
-ts_plot('WALK', 2017) #0.886
+legend('topright', legend = c('', '','NEON measured', 'NEON QC flag'),
+       col = c('transparent', 'transparent', 'black', 'black'),
+       pch = c(1, 1, 1, 39), bty = 'n')
+ts_plot('FLNT', 2018)
+ts_plot('LEWI', 2019, border = adjustcolor('red', alpha.f = 0.2))
+ts_plot('WALK', 2017, border = adjustcolor('red', alpha.f = 0.2))
 mtext(expression('Discharge (Ls'^-1*')'), side = 2, outer = TRUE)
 dev.off()
 

@@ -2524,19 +2524,19 @@ retrieve_test_results <- function(runids, strategy, loc = nh_dir){
     return(list(nse = nse_out, kge = kge_out))
 }
 
-polygon_with_gaps <- function(df){
+polygon_with_gaps <- function(df, border = NA){
 
-    rl = rle(is.na(df$Q_pred_int_2.5))
-    vv = ! rl$values
-    chunkfac = rep(cumsum(vv), rl$lengths)
-    chunkfac[chunkfac == 0] = 1
-    chunks = split(df, chunkfac)
-    noNAchunks = lapply(chunks, function(x) x[! is.na(x$Q_pred_int_2.5), ])
+    rl <- rle(is.na(df$Q_pred_int_2.5))
+    vv <- ! rl$values
+    chunkfac <- rep(cumsum(vv), rl$lengths)
+    chunkfac[chunkfac == 0] <- 1
+    chunks <- split(df, chunkfac)
+    noNAchunks <- lapply(chunks, function(x) x[! is.na(x$Q_pred_int_2.5), ])
 
     for(i in 1:length(noNAchunks)){
-        polygon(x=c(noNAchunks[[i]]$datetime, rev(noNAchunks[[i]]$datetime)),
-                y=c(noNAchunks[[i]]$Q_pred_int_2.5, rev(noNAchunks[[i]]$Q_pred_int_97.5)),
-                col=adjustcolor('red', alpha.f=0.2), border=NA)
+        polygon(x = c(noNAchunks[[i]]$datetime, rev(noNAchunks[[i]]$datetime)),
+                y = c(noNAchunks[[i]]$Q_pred_int_2.5, rev(noNAchunks[[i]]$Q_pred_int_97.5)),
+                col = adjustcolor('red', alpha.f = 0.2), border = border)
     }
 }
 
@@ -2582,7 +2582,7 @@ polygon_with_gaps2 <- function(df, gapcol, lowval, highval, col = 'blue',
     }
 }
 
-plot_gap_points <- function(d, dfill, dmask = NULL, mingap){
+plot_gap_points <- function(d, dfill, dmask = NULL, mingap, col = 'black'){
 
     rl <- rle(! is.na(d$discharge))
     vv <- ! rl$values
@@ -2605,7 +2605,8 @@ plot_gap_points <- function(d, dfill, dmask = NULL, mingap){
                              maskchunks)
 
         NAchunks <- Filter(function(x) any(sapply(maskchunks, function(y){
-            abs(difftime(min(x$datetime), min(y$datetime))) < 10
+            snapdist <- if(s == 'CARI') 60 else 10
+            abs(difftime(min(x$datetime), min(y$datetime))) < snapdist
         })), NAchunks)
     }
 
@@ -2616,31 +2617,40 @@ plot_gap_points <- function(d, dfill, dmask = NULL, mingap){
             missing_dts <- NAchunks[[j]]$datetime[is.na(NAchunks[[j]]$discharge)]
             points(dfill$datetime[dfill$datetime %in% missing_dts],
                    dfill$Q_predicted[dfill$datetime %in% missing_dts],
-                   col = 'black', pch = '.')
+                   col = col, pch = '.')
         }
     }
 }
 
-ts_plot <- function(site, yr, boldgray = FALSE, ymax = Inf, scaled = TRUE){
+ts_plot <- function(site, yr, boldgray = FALSE, ymax = Inf, scaled = TRUE, border = NA){
 
     if(scaled){
         pred <- read_csv(paste0('out/lm_out_specQ/predictions/', site, '.csv')) %>%
-            select(datetime, starts_with('Q_pred'), Q_neon_continuous_raw)
+            select(datetime, starts_with('Q_pred'))
         fit <- read_csv(paste0('out/lm_out_specQ/fit/', site, '.csv')) %>%
             select(datetime, Q_neon_field)
     } else {
         pred <- read_csv(paste0('out/lm_out/predictions/', site, '.csv')) %>%
-            select(datetime, starts_with('Q_pred'), Q_neon_continuous_raw)
+            select(datetime, starts_with('Q_pred'))
         fit <- read_csv(paste0('out/lm_out/fit/', site, '.csv')) %>%
             select(datetime, Q_neon_field)
     }
 
+    withf <- read_csv(glue('in/NEON/neon_continuous_Q_withflags/{site}.csv'))
+    withoutf <- read_csv(glue('in/NEON/neon_continuous_Q/{site}.csv'))
+
     plotd <- full_join(pred, fit, by = 'datetime') %>%
+        left_join(select(withf, datetime, qwith = discharge), by = 'datetime') %>%
+        left_join(select(withoutf, datetime, qwo = discharge), by = 'datetime') %>%
         filter(datetime >= as.POSIXct(paste0(yr, '-01-01')),
                datetime <= as.POSIXct(paste0(yr, '-12-31'))) %>%
         arrange(datetime)
 
-    ymax_ <- max(c(plotd$Q_neon_continuous_raw, plotd$Q_pred_int_97.5, plotd$Q_neon_field), na.rm = TRUE)
+    flagdts <- plotd %>%
+        filter(is.na(qwo) & ! is.na(qwith)) %>%
+        pull(datetime)
+
+    ymax_ <- max(c(plotd$qwith, plotd$Q_pred_int_97.5, plotd$Q_neon_field), na.rm = TRUE)
     rle_ <- rle2(as.numeric(month(plotd$datetime)))
 
     if(nrow(rle_) < 12){
@@ -2649,18 +2659,19 @@ ts_plot <- function(site, yr, boldgray = FALSE, ymax = Inf, scaled = TRUE){
 
     xaxis_labs <- substr(month.abb, 1, 1)[rle_$values]
 
-    plot(plotd$datetime, plotd$Q_neon_continuous_raw, type = 'n',
-         ylim = c(0, min(ymax_, ymax)),
-         xlab = '', ylab = '', xaxt = 'n')
+    ylm <- c(0, min(ymax_, ymax))
+    plot(plotd$datetime, plotd$qwith, type = 'n',
+         ylim = ylm, xlab = '', ylab = '', xaxt = 'n')
     axis(1, plotd$datetime[rle_$starts], xaxis_labs)
     axis(1, plotd$datetime[rle_$stops[nrow(rle_)]], yr, tick = F, font = 2)
-    polygon_with_gaps(plotd)
+    polygon_with_gaps(plotd, border = border)
     if(boldgray){
-        lines(plotd$datetime, plotd$Q_neon_continuous_raw, col = 'gray50', lwd = 3)
+        lines(plotd$datetime, plotd$qwith, col = 'gray50', lwd = 3)
     } else {
-        lines(plotd$datetime, plotd$Q_neon_continuous_raw, col = 'gray50')
+        lines(plotd$datetime, plotd$qwith, col = 'gray50')
     }
     lines(plotd$datetime, plotd$Q_predicted, col = 'red')
+    points(flagdts, rep(ylm[2] * -0.03, length(flagdts)), pch = 39, col = 'black')
     points(plotd$datetime, plotd$Q_neon_field, col = 'black', pch = 1)
     mtext(site, 3, -1, adj = 0.01, padj = 0.1)
 }

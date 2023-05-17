@@ -1,6 +1,6 @@
 # Mike Vlah
 # vlahm13@gmail.com
-# last edit: 2023-03-08
+# last edit: 2023-05-16
 
 library(tidyverse)
 library(neonUtilities)
@@ -84,21 +84,12 @@ for(i in seq_along(neon_sites)){
     ensembled <- any(grepl('G|S|PG|PS', unlist(filter(ranks, site == !!s)[, 2:4])))
     if(ensembled){
 
-        # mis_dates <- dboth$datetime[is.na(dboth$Q_predicted)] %>%
-        #     as.Date() %>%
-        #     unique()
-
         dlstm <- read_csv(glue('out/lstm_out/predictions/{s}.csv')) %>%
             mutate(datetime = as_datetime(date)) %>%
             mutate(Q_predicted = neglog(Q_predicted)) %>%
             filter(datetime > min(d$datetime),
                    datetime < max(d$datetime)) %>%
-            # as.Date(datetime) %in% mis_dates) %>%
             select(-date)
-        # tidyr::complete(datetime = seq(min(datetime), max(datetime), by = '1 day'))
-
-        # polygon_with_gaps2(dlstm, 'Q_predicted', 0, 100, 'white',
-        #                    invert = TRUE, hashed = TRUE)
     }
 
     plot(d$datetime, d$discharge, type = 'n',
@@ -142,8 +133,8 @@ for(i in seq_along(neon_sites)){
         lines(d$datetime, d$discharge, col = 'gray60')
 
         if(ensembled){
-            plot_gap_points(d = d, dfill = dlstm, mingap = 6,
-                            dmask = rename(dfill, discharge = Q_predicted))
+            dmask <- if(is.null(dfill)) NULL else rename(dfill, discharge = Q_predicted)
+            plot_gap_points(d = d, dfill = dlstm, mingap = 6, dmask = dmask)
         }
     }
 
@@ -153,16 +144,19 @@ for(i in seq_along(neon_sites)){
 
     if(i == 1){
 
-        legend(x = as.POSIXct('2021-09-30'), y = -90, bty = 'n', border = FALSE, cex = 1.5,
-               legend = c('NEON\nmissing', 'Reconstruction\nmissing',
-                          'Both\nmissing'),
-               fill = c('#bdd9ff', '#FFBDF9', '#c09eff'),
-               xpd = NA, x.intersp = 1.1, y.intersp = 2)
-
-        legend(x = as.POSIXct('2021-09-19'), y = -125, bty = 'n', border = FALSE, cex = 1.5,
+        legend(x = as.POSIXct('2021-09-19'), y = -80, bty = 'n', border = FALSE, cex = 1.5,
                legend = c('NEON\ndischarge', 'Reconstruction\ngapfill'),
+                          # 'Reconstruction\ndaily'),
                col = c('gray60', 'black'), lty = 1, lwd = 2, xpd = NA,
                seg.len = 1.2, y.intersp = 2)
+
+        legend(x = as.POSIXct('2021-09-30'), y = -103, bty = 'n', border = FALSE, cex = 1.5,
+               legend = c('NEON\nmissing', 'Reconstruction\nmissing',
+                          'Both missing', 'Reconstruction\ndaily',
+                          'Daily only'),
+               fill = c('#bdd9ff', '#FFBDF9', '#c09eff', '#FFBDF9', '#c09eff'),
+               density = c(NA, NA, NA, 30, 30), angle = 45,
+               xpd = NA, x.intersp = 1.1, y.intersp = 2)
     }
 
     mtext(s, side = 2, las = 1, line = -1.2)
