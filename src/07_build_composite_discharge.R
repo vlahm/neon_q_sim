@@ -242,7 +242,7 @@ for(i in seq_len(nrow(ranks))){
             composite[composite$datetime %in% comp_$datetime, 'src_n'] <- 1
             r1 <- comp_
         } else {
-            popul_inds <- get_populatable_indices(composite$src_n, mingap = 300)
+            popul_inds <- get_populatable_indices(composite$src_n, mingap = 144)
             comp_ <- filter(comp_, datetime %in% composite$datetime[popul_inds])
             composite[popul_inds & composite$datetime %in% comp_$datetime, 'src_n'] <- 2
             r2 <- comp_
@@ -250,7 +250,7 @@ for(i in seq_len(nrow(ranks))){
     }
 
     if('N' %in% rankvec){
-        popul_inds <- get_populatable_indices(composite$src_n, mingap = 300)
+        popul_inds <- get_populatable_indices(composite$src_n, mingap = 144)
         neon_backup <- filter(neon_backup, datetime %in% composite$datetime[popul_inds])
         composite[popul_inds & composite$datetime %in% neon_backup$datetime, 'src_n'] <- 3
     }
@@ -261,7 +261,7 @@ for(i in seq_len(nrow(ranks))){
             filter(! is.na(discharge_Ls)) %>%
             mutate(src_n = 4)
 
-        popul_inds <- get_populatable_indices(composite$src_n, mingap = 300)
+        popul_inds <- get_populatable_indices(composite$src_n, mingap = 144)
         comp_ <- filter(comp_, datetime %in% composite$datetime[popul_inds])
         composite[popul_inds & composite$datetime %in% comp_$datetime, 'src_n'] <- 4
     }
@@ -279,11 +279,11 @@ for(i in seq_len(nrow(ranks))){
         select(-src_n) %>%
         arrange(datetime)
 
-    write.csv(composite, glue('out/composite_series/{s}.csv'))
+    write_csv(composite, glue('out/composite_series/{s}.csv'))
 
     suppressWarnings(rm(list = c('r1', 'r2', 'neon_backup', 'pgdl')))
 
-    #files too big and render too slow if bounds included in plot
+    #files too big and render too slowly if bounds included in plot
     q_plot <- read_csv(glue('in/NEON/neon_continuous_Q/{s}.csv')) %>%
         select(datetime, discharge_original = discharge) %>%
                # lower95_original = discharge_lower,

@@ -2859,7 +2859,7 @@ restore_transient <- function(x, orig_head, orig_tail, trans){
 get_populatable_indices <- function(src_column, mingap){
 
     popul_inds <- rle2(is.na(src_column)) %>%
-        filter(values, lengths >= 300) %>%
+        filter(values, lengths >= mingap) %>%
         {mapply(function(x, y) x:y, .$starts, .$stops)} %>%
         unlist()
 
