@@ -115,6 +115,7 @@ skilled <- bind_rows(
     arrange(desc(kge)) %>%
     print(n = 100)
 
+# write_csv(skilled, '~/Desktop/dcc_runs/skilled_searches.csv')
 # skilled = read_csv('~/Desktop/dcc_runs/skilled_searches.csv')
 # distinct(skilled, run, .keep_all = T)
 

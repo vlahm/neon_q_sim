@@ -295,6 +295,7 @@ statd %>%
     mutate(across(where(is.numeric), ~round(., 3))) %>%
     select(-n_nse) %>%
     rename(n_sites = n_kge) %>%
+    slice(c(1:3, 5, 4, 6, 7)) %>%
     write_csv('out/score_table.csv')
 
 ## 7. stats ####
@@ -321,6 +322,7 @@ maxd$bestmod_nse <- grep('^nse_', colnames(maxd_), value = TRUE)[-1][maxd$bestmo
 maxd$bestmod_nse <- substr(maxd$bestmod_nse, 5, nchar(maxd$bestmod_nse))
 maxd$bestmod_kge <- grep('^kge_', colnames(maxd_), value = TRUE)[-1][maxd$bestmod_kge]
 maxd$bestmod_kge <- substr(maxd$bestmod_kge, 5, nchar(maxd$bestmod_kge))
+maxd <- arrange(maxd, desc(kge_neon_overall))
 
 print(maxd, n = 50)
 
@@ -342,13 +344,13 @@ group_by(maxd) %>%
 filter(maxd, max_kge > kge_neon_overall)
 filter(maxd, max_nse > nse_neon_overall)
 
-#how many neon sites' published records have efficiencies < 0.7?
-filter(maxd, kge_neon_overall < 0.7)
-filter(maxd, nse_neon_overall < 0.7)
+#how many neon sites' published records have efficiencies < 0.8?
+filter(maxd, kge_neon_overall < 0.8)
+filter(maxd, nse_neon_overall < 0.8)
 
-#mean KGE of the sites we raised above the 0.7 mark
+#mean KGE of the sites we raised above the 0.8 mark
 maxd %>%
-    filter(kge_neon_overall < 0.7,
-           max_kge > 0.7) %>%
+    filter(kge_neon_overall < 0.8,
+           max_kge > 0.8) %>%
     pull(max_kge) %>%
     mean()

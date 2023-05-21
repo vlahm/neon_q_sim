@@ -2867,3 +2867,142 @@ get_populatable_indices <- function(src_column, mingap){
 
     return(popul_inds)
 }
+
+prepare_q_neon <- function(site, smooth_plot = FALSE){
+
+    window_size <- 15 #keep it odd
+    q <- read_csv(glue('in/NEON/neon_continuous_Q/{site}.csv'))
+
+    if(site != 'TOMB'){
+
+        transient <- window_size %/% 2
+        q_bounds <- select(q, -site_code, -discharge)
+        q_orig <- select(q, datetime, discharge_orig = discharge)
+        q <- select(q, datetime, discharge)
+
+        #fill out missing data (make explicit) to one minute interval
+        q <- complete(q, datetime = seq(min(datetime), max(datetime), by = '1 min'))
+
+        #pad head and tail for moving average window
+        buffer1 <- tibble(datetime = seq(q$datetime[1] - (60 * transient),
+                                         q$datetime[1] - 60,
+                                         by = '1 min'))
+        buffer2 <- tibble(datetime = seq(q$datetime[nrow(q)] + 60,
+                                         q$datetime[nrow(q)] + (60 * transient),
+                                         by = '1 min'))
+        q <- bind_rows(buffer1, q, buffer2)
+
+        q_dt <- q$datetime
+        q_na <- is.na(q$discharge)
+
+        #traingular moving average to smooth over bayesian obs error
+        q <- xts(q$discharge, q$datetime, tzone = 'UTC')
+        q <- rollmean(q, window_size, fill = NA, align = 'center', na.rm = TRUE)
+        q <- rollmean(q, window_size, fill = NA, align = 'center', na.rm = TRUE)
+        q <- suppressWarnings(as.vector(q))
+
+        #restore missing values
+        q[q_na] <- NA_real_
+
+        #need to interpolate uncertainty too, so it isn't lost during downsampling
+        q <- left_join(tibble(discharge = q, datetime = q_dt), q_bounds, by = 'datetime') %>%
+            slice((transient + 1):(length(q) - transient)) %>%
+            mutate(across(-datetime, ~na_interpolation(., , maxgap = 14)))
+        # mutate(across(-datetime, ~na_seadec(ts(., deltat = 1/1440), maxgap = 14)))
+
+        #downsample to even 5 minute interval. priority breakdown:
+        #   1. preserve observations originally on minutes divisible by 5
+        #   2. accept newly interpolated values where the original interval was
+        #      2-15 minutes and/or offset from a natural 5-minute sequence
+        #   3. shift original values by up to 2 minutes if interpolation was
+        #      not performed, e.g. where the sampling interval is 16-60 minutes
+        q$m5 <- FALSE
+        q$m5[minute(q$datetime) %% 5 == 0] <- TRUE
+        q$datetime <- round_date(q$datetime, unit = '5 min')
+        q <- group_by(q, datetime) %>%
+            slice(if(any(m5)) which(m5)[1] else if(any(! is.na(discharge))) which(! is.na(discharge))[1] else 1) %>%
+            ungroup() %>%
+            select(-m5)
+
+        if(any(duplicated(q$datetime))) warning('dupes in ', site)
+
+        if(smooth_plot){
+
+            require(dygraphs)
+            require(htmlwidgets)
+
+            zz = full_join(q, q_orig, by = 'datetime')
+            dygraphs::dygraph(xts(x = select(zz, discharge_orig, discharge_lower, discharge_upper, discharge),
+                                  order.by = zz$datetime)) %>%
+                dyRangeSelector() %>%
+                saveWidget(glue('figs/smooth_plots/{site}.html'))
+        }
+    }
+
+    q <- q %>%
+        mutate(source = 'NEON') %>%
+        select(datetime, discharge_Ls = discharge, discharge_lower95_Ls = discharge_lower,
+               discharge_upper95_Ls = discharge_upper, source)
+
+    return(q)
+}
+
+prepare_q_lm <- function(site){
+
+    lm_res <- read_csv('out/lm_out/results.csv') %>%
+        filter(site_code == site) %>%
+        pull(kge)
+
+    lm_sq_res <- read_csv('out/lm_out_specQ/results_specificq.csv') %>%
+        filter(site_code == site) %>%
+        pull(kge)
+
+    if(is.na(lm_res)) stop('no lm result for this site')
+
+    strategy <- ifelse(lm_res > lm_sq_res, 'lm_out', 'lm_out_specQ')
+
+    q <- read_csv(glue('out/{strategy}/predictions/{site}.csv'))
+
+    if('date' %in% colnames(q)){
+        q$datetime <- as_datetime(paste(q$date, '12:00:00'))
+    }
+
+    q <- select(q, datetime, discharge_Ls = Q_predicted,
+                discharge_lower95_Ls = Q_pred_int_2.5,
+                discharge_upper95_Ls = Q_pred_int_97.5)
+
+    # plot(q$datetime, q$discharge_Ls, type = 'l', ylim = c(0, 1000))
+    # points(q$datetime[!q$m5], q$discharge_Ls[!q$m5], col = 'red')
+
+    q <- complete(q, datetime = seq(min(datetime), max(datetime), by = '5 min'))
+    q$m5 <- FALSE
+    q$m5[minute(q$datetime) %% 5 == 0] <- TRUE
+    q$datetime <- round_date(q$datetime, unit = '5 min')
+    q <- group_by(q, datetime) %>%
+        slice(if(any(m5)) which(m5)[1] else which(! is.na(discharge_Ls))[1]) %>%
+        ungroup() %>%
+        select(-m5)
+
+    if(any(duplicated(q$datetime))) warning('dupes in ', site)
+
+    # q$discharge_Ls <- na_seadec(ts(q$discharge_Ls, deltat = 1/288), maxgap = 2)
+    q$discharge_Ls <- na_interpolation(q$discharge_Ls, maxgap = 2)
+
+    q$source <- ifelse(strategy == 'lm_out', 'Linreg', 'Linreg_scaled')
+
+    return(q)
+}
+
+prepare_q_lstm <- function(site){
+
+    q <- read_csv(glue('out/lstm_out/predictions/{site}.csv'))
+
+    q$source <- filter(results, site_code == !!site)$strategy
+    q$datetime <- as_datetime(paste(q$date, '12:00:00'))
+
+    q <- select(q, datetime, discharge_Ls = Q_predicted,
+                discharge_lower95_Ls = Q_pred_int_2.5,
+                discharge_upper95_Ls = Q_pred_int_97.5, source)
+
+    return(q)
+}
