@@ -15,8 +15,6 @@ library(yaml)
 
 # ALSO NOTE: you don't need to download and build all these components piecemeal.
 # We've bundled it on Figshare ([**]).
-# We used a previous version of the CAMELS dataset for
-# training LSTMs, so some paths will certainly break if you use the current version.
 
 options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,

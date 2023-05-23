@@ -41,7 +41,7 @@ for(i in seq_len(nrow(ranks))){
     rankvec <- unlist(ranks[i, 2:4])
 
     composite <- tibble(datetime = seq(as.POSIXct('2014-01-01', tz = 'UTC'),
-                                       as.POSIXct('2024-01-01', tz = 'UTC'),
+                                       as.POSIXct('2021-09-30', tz = 'UTC'),
                                        by = '5 min'),
                         src_n = NA_integer_)
 
@@ -55,6 +55,7 @@ for(i in seq_len(nrow(ranks))){
         if(r == 'N'){
 
             comp_ <- prepare_q_neon(site = s, smooth_plot = FALSE)
+            comp_ <- filter(comp_, ! is.na(discharge_Ls))
 
             good_months <- q_eval %>%
                 filter(site == !!s, final_qual %in% c('Tier1', 'Tier2')) %>%
@@ -64,7 +65,7 @@ for(i in seq_len(nrow(ranks))){
 
             comp_ <- mutate(comp_, year = year(datetime), month = month(datetime))
 
-            if(s == 'TOMB'){
+            if(s %in% c('TOMB', 'ARIK')){
                 comp_$good <- 1
             } else {
                 comp_ <- left_join(comp_, good_months, by = c('year', 'month'))
@@ -74,7 +75,8 @@ for(i in seq_len(nrow(ranks))){
                 filter(nse >= 0.4, kge >= 0.5)
 
             neon_backup <- comp_ %>%
-                filter(is.na(good)) %>%
+                filter(is.na(good),
+                       ! is.na(discharge_Ls)) %>%
                 mutate(wateryr = year,
                        wateryr = ifelse(month >= 10, wateryr + 1, wateryr)) %>%
                 filter(wateryr %in% good_wys$wateryr) %>%
@@ -172,3 +174,34 @@ for(i in seq_len(nrow(ranks))){
         dyRangeSelector() %>%
         saveWidget(glue('figs/composite_plots/{s}.html'))
 }
+
+# 2. supplemental table of best models for each site ####
+
+lstm_codes <- c('S', 'G', 'PG', 'PS')
+
+lm_incl <- ranks %>%
+    filter(rank1 == 'L' | rank2 == 'L') %>%
+    pull(site)
+lstm_incl <- ranks %>%
+    filter(rank2 %in% lstm_codes | rank3 %in% lstm_codes) %>%
+    pull(site)
+
+res_lm <- read_csv('out/lm_out/results.csv') %>%
+    select(site_code, kge, nse, method) %>%
+    mutate(method = paste0(method, '_abs'))
+res_lms <- read_csv('out/lm_out_specQ/results_specificq.csv') %>%
+    select(site_code, kge, nse, method) %>%
+    mutate(method = paste0(method, '_spec'))
+res_lstm <- read_csv('out/lstm_out/results.csv') %>%
+    select(site_code, kge = KGE, nse = NSE, method = strategy) %>%
+    filter(site_code %in% lstm_incl)
+
+bind_rows(res_lm, res_lms) %>%
+    group_by(site_code) %>%
+    filter(kge == max(kge)) %>%
+    arrange(desc(kge)) %>%
+    filter(site_code %in% lm_incl) %>%
+    full_join(res_lstm, by = 'site_code', suffix = c('_linreg', '_lstm')) %>%
+    bind_rows(tibble(site_code = c('PRIN', 'OKSR'))) %>%
+    write_csv('out/models_used_to_build_composite_series.csv')
+
