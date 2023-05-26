@@ -20,7 +20,7 @@ xr <- import("xarray")
 pd <- import("pandas")
 np <- import("numpy")
 
-#pre-bundled in/out data available at: [**]
+#pre-bundled in/out data available at: 10.6084/m9.figshare.c.6488065
 if(! exists('ts_plot')) source('src/00_helpers.R')
 if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 if(! dir.exists('in/lstm_data')) source('src/03_organize_camels_macrosheds_nhm.R', local = new.env())

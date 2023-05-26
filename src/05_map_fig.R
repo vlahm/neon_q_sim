@@ -11,7 +11,7 @@ library(sf)
 library(terra)
 library(osmdata)
 
-#pre-bundled in/out data available at: [**]
+#pre-bundled in/out data available at: 10.6084/m9.figshare.c.6488065
 if(! exists('ts_plot')) source('src/00_helpers.R')
 if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 

@@ -14,7 +14,7 @@ library(yaml)
 # setwd('path/to/q_sim')
 
 # ALSO NOTE: you don't need to download and build all these components piecemeal.
-# We've bundled it on Figshare ([**]).
+# We've bundled it on Figshare (10.6084/m9.figshare.c.6488065).
 
 options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,

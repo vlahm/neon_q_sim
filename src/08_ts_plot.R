@@ -11,7 +11,7 @@ options(readr.show_progress = FALSE,
         readr.show_col_types = FALSE,
         timeout = 3000)
 
-#pre-bundled in/out data available at: [**]
+#pre-bundled in/out data available at: 10.6084/m9.figshare.c.6488065
 if(! exists('ts_plot')) source('src/00_helpers.R')
 if(! exists('ms_areas')) source('src/01_data_retrieval.R')
 if(! dir.exists('out/lm_out')) source('src/02_regression.R', local = new.env())
