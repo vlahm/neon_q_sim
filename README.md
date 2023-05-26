@@ -1,4 +1,4 @@
-Code and data accompanying Vlah, Ross, Rhea, Bernhardt. 2023. "The ample practicality of virtual streamflow gauges: a case study at NEON stream sites". HESS
+Code and data accompanying Vlah, Ross, Rhea, Bernhardt. 2023. "Virtual gauges: the surprising potential to reconstruct continuous streamflow from strategic measurements". HESS
 
  All data for this study can be found in [this Figshare collection](https://dx.doi.org/10.6084/m9.figshare.c.6488065). Within that collection you'll find:
  + [Input data](https://dx.doi.org/10.6084/m9.figshare.22349377)
