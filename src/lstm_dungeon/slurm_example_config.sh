@@ -13,7 +13,7 @@ echo ''
 echo 'starting'
 date
 module load CUDA/11.4 #e.g.
-srun /hpc/path/to/your/miniconda3/envs/nh2/bin/python /hpc/path/to/wd/lstms.py $SLURM_ARRAY_TASK_ID
+srun /hpc/path/to/your/miniconda3/envs/nh2/bin/python /hpc/path/to/wd/run_lstms_hpc.py $SLURM_ARRAY_TASK_ID
 echo 'done'
 date
 
