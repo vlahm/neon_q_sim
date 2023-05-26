@@ -7,3 +7,4 @@ debris/
 .Rhistory
 log/
 cfg/google_auth.cfg
+*.zip
