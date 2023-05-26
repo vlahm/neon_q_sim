@@ -205,3 +205,33 @@ bind_rows(res_lm, res_lms) %>%
     bind_rows(tibble(site_code = c('PRIN', 'OKSR'))) %>%
     write_csv('out/models_used_to_build_composite_series.csv')
 
+
+# 3. supplemetal figure of neon field Q vs dist of continuous Q ####
+
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+
+dist_list <- list()
+for(ns in neon_sites){
+
+    estq <- read_csv(glue('in/NEON/neon_continuous_Q/{ns}.csv')) %>%
+            select(datetime, q_est = discharge)
+    obsq <- read_csv(glue('in/NEON/neon_field_Q/{ns}.csv')) %>%
+            select(datetime, q_obs = discharge)
+
+    dist_list[[ns]] <- ggplot(estq, aes(x = q_est)) +
+        geom_density(fill = 'lightblue', color = 'darkblue', alpha = 0.6) +
+        geom_rug(data = obsq, aes(x = q_obs), sides = 'b', color = 'red') +
+        labs(title = ns) +
+        # scale_x_log10(breaks = 10^(-5:5)) +
+        theme(panel.background = element_blank(),
+              axis.title.x = element_blank(),
+              axis.title.y = element_blank())
+}
+
+png(width = 9, height = 12, units = 'in', type = 'cairo', res = 300,
+    filename = 'figs/dist_plot.png')
+grid.arrange(grobs = dist_list, nrow = 7, ncol = 4,
+             bottom = 'Discharge (L/s)', left = 'Density')
+dev.off()
