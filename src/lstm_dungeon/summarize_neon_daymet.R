@@ -15,6 +15,8 @@ boundaries <- st_read('in/NEON/NEONAquaticWatershed/NEON_Aquatic_Watershed.shp')
 gee_login <- read_lines('cfg/google_auth.cfg', skip_empty_rows = TRUE, n_max = 1) %>%
     str_extract('^([^ #])+')
 
+if(gee_login == 'your_address@gmail.com') stop('you need to authorize google drive and google earth engine, and then put your authorization email in /cfg/google_auth.cfg')
+
 googledrive::drive_auth(email = gee_login)
 rgee::ee_Initialize(user = gee_login, drive = TRUE)
 user_info <- rgee::ee_user_info(quiet = TRUE)
