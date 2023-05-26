@@ -1,4 +1,6 @@
-Code and data accompanying Vlah, Ross, Rhea, Bernhardt. 2023. "Virtual gauges: the surprising potential to reconstruct continuous streamflow from strategic measurements". HESS.
+Code and configuration files accompanying:
+
+ > Vlah et al. 2023. "Virtual gauges: the surprising potential to reconstruct continuous streamflow from strategic measurements". HESS.
 
  All data for this study can be found in [this Figshare collection](https://dx.doi.org/10.6084/m9.figshare.c.6488065). Within the collection you'll find:
  + [Input data](https://dx.doi.org/10.6084/m9.figshare.22349377)
