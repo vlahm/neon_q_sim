@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/596161962.svg)](https://zenodo.org/badge/latestdoi/596161962)
+
 Code and configuration files accompanying:
 
  > Vlah et al. 2023. "Virtual gauges: the surprising potential to reconstruct continuous streamflow from strategic measurements". HESS.
