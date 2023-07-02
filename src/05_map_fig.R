@@ -10,6 +10,7 @@ library(yaml)
 library(sf)
 library(terra)
 library(osmdata)
+#rJava and OpenStreetMap packages are also required dependencies
 
 #pre-bundled in/out data available at: 10.6084/m9.figshare.c.6488065
 if(! exists('ts_plot')) source('src/00_helpers.R')
@@ -47,11 +48,13 @@ basemap_main <- tmaptools::read_osm(bbox, type = 'osm-public-transport')
 main_map <-
     tm_shape(basemap_main) + tm_rgb() +
     tm_shape(neon_sites) + tm_symbols(shape = 19, col = neoncol, size = 0.5, border.lwd = 2, alpha=0.5) +
-    tm_compass(type="arrow", position=c("left", "bottom"), show.labels = 0, size = 1.2) +
-    tm_scale_bar(position=c(0.1, 0.01), breaks = c(0, 1000, 2000), text.size = 0.6) +
+    tm_compass(type="arrow", position=c(0.03, 0.05), show.labels = 0, size = 1.2) +
+    tm_scale_bar(position=c(0.1, 0.03), breaks = c(0, 1000, 2000), text.size = 0.6) +
     tm_add_legend(type='symbol', labels = c('NEON', 'USGS', 'MacroSheds'),
                   col = c(neoncol, 'darkorange4', 'purple4'), size = 0.5, shape=19) +
-    tm_legend(show=TRUE, position=c('right', 'top'), bg.color='gray97', frame = TRUE, height = -0.115)
+    tm_legend(show=TRUE, position=c('right', 'top'), bg.color='gray97', frame = TRUE, height = -0.115) +
+    tm_credits('© opendatacommons.org and openstreetmap.org contributors',
+               size = 0.5, position = c(0, 0))
 
 tmap_save(main_map, filename='figs/map_components/main_map.png', bg="white",
           dpi = 600, height = 5, width = 5, units = 'in')
