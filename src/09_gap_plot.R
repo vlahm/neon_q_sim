@@ -49,9 +49,9 @@ for(s in neon_sites){
 
 neon_sites <- sort(neon_sites)
 
-png(width = 8, height = 12, units = 'in', type = 'cairo', res = 300,
+png(width = 8, height = 11, units = 'in', type = 'cairo', res = 300,
     filename = 'figs/gaps.png')
-par(mfrow = c(27, 1), mar = c(1, 3, 0, 0), oma = c(2, 2, 2, 10))
+par(mfrow = c(27, 1), mar = c(1, 3, 0, 0), oma = c(0, 2, 0, 10.1))
 for(i in seq_along(neon_sites)){
 
     s <- neon_sites[i]
