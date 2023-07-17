@@ -52,9 +52,9 @@ main_map <-
     tm_scale_bar(position=c(0.1, 0.03), breaks = c(0, 1000, 2000), text.size = 0.6) +
     tm_add_legend(type='symbol', labels = c('NEON', 'USGS', 'MacroSheds'),
                   col = c(neoncol, 'darkorange4', 'purple4'), size = 0.5, shape=19) +
-    tm_legend(show=TRUE, position=c('right', 'top'), bg.color='gray97', frame = TRUE, height = -0.115) +
-    tm_credits('© OpenStreetMap contributors 2023. Distributed under Open Data Commons ODbL v1.0.',
-               size = 0.6, position = c(0, 0), col = 'gray40')
+    tm_legend(show=TRUE, position=c('right', 'top'), bg.color='gray97', frame = TRUE, height = -0.115)
+    # tm_credits('© OpenStreetMap contributors 2023. Distributed under Open Data Commons ODbL v1.0.',
+    #            size = 0.6, position = c(0, 0), col = 'gray40')
 
 tmap_save(main_map, filename='figs/map_components/main_map.png', bg="white",
           dpi = 600, height = 5, width = 5, units = 'in')
