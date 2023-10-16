@@ -70,7 +70,6 @@ if(! file.exists('in/NEON/neon_q_eval.csv')){
                   destfile = 'in/NEON/neon_q_eval.csv')
 }
 
-#last retrieval: #2023-01-31
 q_eval <- read_csv('in/NEON/neon_q_eval.csv') %>%
     filter(site %in% neon_sites)
 
