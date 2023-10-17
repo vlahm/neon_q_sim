@@ -10,6 +10,8 @@ library(yaml)
 library(sf)
 library(terra)
 library(osmdata)
+library(rnaturalearth)
+library(rnaturalearthdata)
 #rJava and OpenStreetMap packages are also required dependencies
 
 #pre-bundled in/out data available at: 10.6084/m9.figshare.c.6488065
@@ -22,6 +24,7 @@ dir.create('figs/map_components', showWarnings = FALSE)
 
 neon_sites <- read_csv('in/NEON/neon_site_info.csv') %>%
     filter(! SiteType == 'Lake') %>%
+    mutate(SiteID = if_else(SiteID %in% c('MCRA', 'REDB', 'GUIL'), '', SiteID)) %>% #these sites have inset plots
     st_as_sf(coords = c('Longitude', 'Latitude'))
 
 ms_site_codes_in_use <- c('GSWS01', 'GSWS08', 'GSLOOK', 'ALBION', 'SADDLE')
@@ -40,14 +43,21 @@ usgs_sites_flattened <- Reduce(bind_rows, usgs_sites)
 ## 2. Figure 1: map ####
 
 tmap_mode("plot")
+tmap_options(check.and.fix = TRUE)
 
 neoncol = 'goldenrod3'
 
 bbox <- st_bbox(st_buffer(usgs_sites_flattened, dist = 2e5))
-basemap_main <- tmaptools::read_osm(bbox, type = 'osm-public-transport')
+basemap_main <- tmaptools::read_osm(bbox, type = 'esri-terrain')
+countries <- ne_countries(scale = "medium", returnclass = "sf")
+
 main_map <-
     tm_shape(basemap_main) + tm_rgb() +
+    # tm_shape(basemap_main) + tm_borders(lwd = 1, col = "blue") +
+    tm_shape(countries) +
+    tm_borders(lwd = 0.5, col = 'gray60') +
     tm_shape(neon_sites) + tm_symbols(shape = 19, col = neoncol, size = 0.5, border.lwd = 2, alpha=0.5) +
+    tm_text(text = 'SiteID', size = 0.6, auto.placement = 2) +
     tm_compass(type="arrow", position=c(0.04, 0.045), show.labels = 0, size = 1.2) +
     tm_scale_bar(position=c(0.1, 0.03), breaks = c(0, 1000, 2000), text.size = 0.6) +
     tm_add_legend(type='symbol', labels = c('NEON', 'USGS', 'MacroSheds'),
