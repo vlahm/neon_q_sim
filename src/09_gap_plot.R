@@ -21,9 +21,12 @@ if(! dir.exists('out/lstm_runs')) stop("you need to run src/04_run_lstms.R. It w
 
 ## 1. data prep ####
 
-neon_sites <- read_csv('in/NEON/neon_site_info.csv') %>%
-    filter(! SiteType == 'Lake') %>%
-    pull(SiteID)
+#ordered as in Figure 2 (change made during peer review)
+neon_sites <- c('BIGC', 'REDB', 'MART', 'WLOU', 'MCRA', 'TOMB',
+                'FLNT', 'COMO', 'BLWA', 'BLDE', 'CARI', 'OKSR',
+                'TECR', 'HOPB', 'POSE', 'LECO', 'ARIK', 'MAYF',
+                'CUPE', 'BLUE', 'WALK', 'PRIN', 'MCDI', 'GUIL',
+                'KING', 'SYCA', 'LEWI')
 
 if(! length(list.files('in/NEON/neon_continuous_Q_withflags/'))){
     get_neon_inst_discharge(neon_sites, clean_only = FALSE)
@@ -46,8 +49,6 @@ for(s in neon_sites){
 }
 
 ## 2. plot ####
-
-neon_sites <- sort(neon_sites)
 
 png(width = 8, height = 11, units = 'in', type = 'cairo', res = 300,
     filename = 'figs/gaps.png')
@@ -152,13 +153,13 @@ for(i in seq_along(neon_sites)){
 
     if(i == 1){
 
-        legend(x = as.POSIXct('2021-09-19'), y = -80, bty = 'n', border = FALSE, cex = 1.5,
+        legend(x = as.POSIXct('2021-09-19'), y = -110, bty = 'n', border = FALSE, cex = 1.5,
                legend = c('NEON\ndischarge', 'Reconstruction\ngapfill'),
                           # 'Reconstruction\ndaily'),
                col = c('gray70', 'black'), lty = 1, lwd = 2, xpd = NA,
                seg.len = 1.2, y.intersp = 2)
 
-        legend(x = as.POSIXct('2021-09-30'), y = -103, bty = 'n', border = FALSE, cex = 1.5,
+        legend(x = as.POSIXct('2021-09-30'), y = -145, bty = 'n', border = FALSE, cex = 1.5,
                legend = c('NEON\nmissing', 'Reconstruction\nmissing',
                           'Both missing', 'Reconstruction\ndaily',
                           'Daily only'),
@@ -296,3 +297,147 @@ unname(gap_sums[3] / gap_sums[2])
 unname(gapdays_informed / gap_sums[2])
 
 write.csv(gap_stats, 'out/gap_stats.csv', row.names = TRUE)
+
+
+## 2. supplemental figure 10 (post peer review) ####
+
+xlims <- c(Inf, -Inf)
+for(s in neon_sites){
+
+    xlims_ <- plotd[[s]] %>%
+        filter(minute(datetime) %% 15 == 0) %>%
+        pull(datetime) %>%
+        range()
+
+    xlims[1] <- min(xlims[1], xlims_[1])
+    xlims[2] <- max(xlims[2], xlims_[2])
+}
+xlims <- as.POSIXct(xlims)
+
+png(width = 8, height = 11, units = 'in', type = 'cairo', res = 300,
+    filename = 'figs/gaps_fixedx.png')
+par(mfrow = c(27, 1), mar = c(1, 3, 0, 0), oma = c(2, 2, 0, 10.1))
+for(i in seq_along(neon_sites)){
+
+    s <- neon_sites[i]
+
+    d <- plotd[[s]] %>%
+        filter(minute(datetime) %% 15 == 0) %>%
+        mutate(discharge = neglog(discharge)) %>%
+        tidyr::complete(datetime = seq(min(datetime), max(datetime), by = '15 min')) %>%
+        select(datetime, discharge)
+
+    if(! inherits(plotfill[[s]], 'try-error')){
+
+        cmplt <- ifelse(s == 'COMO', '1 day', '15 min')
+
+        dfill <- plotfill[[s]] %>%
+            mutate(across(any_of('date'), as_datetime)) %>%
+            rename_with(function(x) sub('^date$', 'datetime', x)) %>%
+            filter(minute(datetime) %% 15 == 0) %>%
+            select(datetime, Q_predicted) %>%
+            tidyr::complete(datetime = seq(min(datetime), max(datetime), by = cmplt)) %>%
+            mutate(Q_predicted = neglog(Q_predicted)) %>%
+            filter(datetime > min(d$datetime),
+                   datetime < max(d$datetime))
+    } else {
+        dfill <- NULL
+    }
+
+    ensembled <- any(grepl('G|S|PG|PS', unlist(filter(ranks, site == !!s)[, 2:4])))
+    if(ensembled){
+
+        dlstm <- read_csv(glue('out/lstm_out/predictions/{s}.csv')) %>%
+            mutate(datetime = as_datetime(date)) %>%
+            mutate(Q_predicted = neglog(Q_predicted)) %>%
+            filter(datetime > min(d$datetime),
+                   datetime < max(d$datetime)) %>%
+            select(-date)
+    }
+
+    plot(d$datetime, d$discharge, type = 'n', xlim = xlims,
+         ylab = '', xlab = '', xaxt = 'n', yaxt = 'n', bty = 'n')
+
+    if(! is.null(dfill)){
+
+        dboth <- full_join(dfill, d, by = 'datetime') %>%
+            mutate(still_missing = is.na(discharge) & is.na(Q_predicted)) %>%
+            arrange(datetime)
+        dboth$still_missing[dboth$still_missing] <- NA
+
+        polygon_with_gaps2(dboth, 'Q_predicted', 0, 100, '#FFBDF9')
+        polygon_with_gaps2(dboth, 'discharge', 0, 100, '#bdd9ff')
+
+    } else {
+
+        polygon_with_gaps2(d, 'discharge', 0, 100, '#FFBDF9', invert = TRUE)
+        polygon_with_gaps2(d, 'discharge', 0, 100, '#c09eff')
+
+        if(ensembled){
+            polygon_with_gaps2(mutate(d, allna = NA_real_),
+                               'allna', 0, 100, 'white', hashed = TRUE)
+        }
+    }
+
+    if(! is.null(dfill)){
+
+        polygon_with_gaps2(dboth, 'still_missing', 0, 100, '#c09eff')
+
+        if(ensembled){
+            polygon_with_gaps2(dboth, 'Q_predicted', 0, 100, 'white', hashed = TRUE)
+        }
+
+        if(s == 'COMO'){
+            dboth %>%
+                group_by(as.Date(datetime)) %>%
+                mutate(Q_predicted = if(any(! is.na(Q_predicted))) 1 else NA_real_) %>%
+                ungroup() %>%
+                polygon_with_gaps2('Q_predicted', 0, 100, 'white', hashed = TRUE, invert = TRUE)
+        }
+    }
+
+    if(s == 'TOMB'){
+
+        dtomb <- filter(d, ! is.na(discharge))
+        lines(dtomb$datetime, dtomb$discharge, col = 'gray70')
+
+    } else {
+
+        lines(d$datetime, d$discharge, col = 'gray70')
+
+        if(ensembled){
+            dmask <- if(is.null(dfill)) NULL else rename(dfill, discharge = Q_predicted)
+            plot_gap_points(d = d, dfill = dlstm, mingap = 6, dmask = dmask)
+        }
+    }
+
+    if(! is.null(dfill)){
+        plot_gap_points(d = d, dfill = dfill, mingap = 6)
+    }
+
+    if(i == 1){
+
+        legend(x = as.POSIXct('2021-09-19'), y = -110, bty = 'n', border = FALSE, cex = 1.5,
+               legend = c('NEON\ndischarge', 'Reconstruction\ngapfill'),
+               # 'Reconstruction\ndaily'),
+               col = c('gray70', 'black'), lty = 1, lwd = 2, xpd = NA,
+               seg.len = 1.2, y.intersp = 2)
+
+        legend(x = as.POSIXct('2021-09-30'), y = -145, bty = 'n', border = FALSE, cex = 1.5,
+               legend = c('NEON\nmissing', 'Reconstruction\nmissing',
+                          'Both missing', 'Reconstruction\ndaily',
+                          'Daily only'),
+               fill = c('#bdd9ff', '#FFBDF9', '#c09eff', '#FFBDF9', '#c09eff'),
+               density = c(NA, NA, NA, 30, 30), angle = 45,
+               xpd = NA, x.intersp = 1.1, y.intersp = 2)
+    }
+
+    mtext(s, side = 2, las = 1, line = -1.2)
+    axis(1, at = as.POSIXct(c('2017-01-01', '2018-01-01', '2019-01-01', '2020-01-01', '2021-01-01')),
+         labels = 2017:2021, outer = TRUE)
+}
+
+mtext(expression('Log Discharge'), side = 2, outer = TRUE, cex = 1.2,
+      line = -0.5)
+
+dev.off()
