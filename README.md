@@ -1,4 +1,6 @@
-[![DOI](https://zenodo.org/badge/596161962.svg)](https://zenodo.org/badge/latestdoi/596161962)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10067683.svg)](https://doi.org/10.5281/zenodo.10067683)
+
+
 
 Code and configuration files accompanying:
 
